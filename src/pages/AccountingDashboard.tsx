@@ -10,20 +10,36 @@ import { FileText, Download, Eye } from 'lucide-react';
 import { toast } from 'sonner';
 
 export default function AccountingDashboard() {
-  const { currentUser, claims, users, items, markReadyToPay, markPaid, globalFilterProject, globalFilterPeriod } = useStore();
+  const { currentUser, claims, users, items, projects, markReadyToPay, markPaid, globalFilterProject, globalFilterPeriod } = useStore();
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('approved');
   const [selectedClaims, setSelectedClaims] = useState<string[]>([]);
+  const [viewMode, setViewMode] = useState<'claim' | 'user' | 'project'>('claim');
 
   if (!currentUser || currentUser.activeRole !== 'accounting') return null;
 
-  // Apply global filters
-  const filteredClaims = claims.filter(c => {
-    if (globalFilterPeriod !== 'all' && c.periodMonth !== globalFilterPeriod) return false;
+  // Apply global filters and recalculate totals
+  const filteredClaims = claims.map(c => {
+    let claimItems = items.filter(i => c.items.includes(i.id));
+    
+    // Filter items by project if global filter is active
     if (globalFilterProject !== 'all') {
-      const claimItems = items.filter(i => c.items.includes(i.id));
-      if (!claimItems.some(i => i.projectCodeId === globalFilterProject)) return false;
+      claimItems = claimItems.filter(i => i.projectCodeId === globalFilterProject);
     }
+    
+    // Calculate new total based on filtered items
+    const newTotal = claimItems.reduce((sum, item) => sum + item.amount, 0);
+    
+    return {
+      ...c,
+      filteredItems: claimItems,
+      displayTotal: newTotal
+    };
+  }).filter(c => {
+    // Remove claims that have no items left after project filter
+    if (c.filteredItems.length === 0) return false;
+    // Filter by period
+    if (globalFilterPeriod !== 'all' && c.periodMonth !== globalFilterPeriod) return false;
     return true;
   });
 
@@ -65,101 +81,257 @@ export default function AccountingDashboard() {
     toast.success(`Exported ${selectedClaims.length} claims to ${format.toUpperCase()}`);
   };
 
-  const renderClaimsTable = (claimsList: any[], actionButton: React.ReactNode) => (
-    <div className="space-y-4">
-      {selectedClaims.length > 0 && (
-        <div className="flex items-center justify-between p-4 bg-blue-50 border border-blue-200 rounded-lg">
-          <div className="flex items-center gap-4">
-            <span className="font-medium text-blue-800">เลือกแล้ว {selectedClaims.length} รายการ</span>
-            <div className="flex gap-2">
-              <Button variant="outline" size="sm" onClick={() => handleExport('excel')} className="bg-white">
-                <Download className="mr-2 h-4 w-4" /> Excel
-              </Button>
-              <Button variant="outline" size="sm" onClick={() => handleExport('word')} className="bg-white">
-                <Download className="mr-2 h-4 w-4" /> Word
-              </Button>
-            </div>
-          </div>
-          {actionButton}
-        </div>
-      )}
+  const renderClaimsTable = (claimsList: any[], actionButton: React.ReactNode) => {
+    if (viewMode === 'user') {
+      // Group by user
+      const userGroups = claimsList.reduce((acc, claim) => {
+        if (!acc[claim.userId]) acc[claim.userId] = { user: users.find(u => u.id === claim.userId), claims: [], total: 0 };
+        acc[claim.userId].claims.push(claim);
+        acc[claim.userId].total += claim.displayTotal;
+        return acc;
+      }, {} as Record<string, any>);
 
-      <Card>
-        <CardContent className="p-0">
-          <table className="w-full text-sm text-left">
-            <thead className="text-xs text-gray-700 uppercase bg-gray-50 border-b">
-              <tr>
-                <th className="p-4">
-                  <Checkbox 
-                    checked={selectedClaims.length === claimsList.length && claimsList.length > 0}
-                    onCheckedChange={() => handleSelectAll(claimsList)}
-                  />
-                </th>
-                <th className="px-6 py-3">รหัส Claim</th>
-                <th className="px-6 py-3">ผู้ขอเบิก</th>
-                <th className="px-6 py-3">รอบบัญชี</th>
-                <th className="px-6 py-3">ยอดรวม</th>
-                <th className="px-6 py-3">สถานะ</th>
-                <th className="px-6 py-3 text-right">จัดการ</th>
-              </tr>
-            </thead>
-            <tbody>
-              {claimsList.length === 0 ? (
-                <tr>
-                  <td colSpan={7} className="px-6 py-8 text-center text-muted-foreground">ไม่มีข้อมูล</td>
-                </tr>
-              ) : (
-                claimsList.map(claim => {
-                  const user = users.find(u => u.id === claim.userId);
-                  return (
-                    <tr key={claim.id} className="bg-white border-b hover:bg-gray-50">
-                      <td className="p-4">
-                        <Checkbox 
-                          checked={selectedClaims.includes(claim.id)}
-                          onCheckedChange={() => handleSelect(claim.id)}
-                        />
-                      </td>
-                      <td className="px-6 py-4 font-medium">
-                        <div className="flex items-center gap-2">
-                          {claim.id}
-                          {claim.isSpecial && (
-                            <Badge variant="outline" className="text-orange-600 border-orange-200 bg-orange-50 text-[10px]">
-                              กรณีพิเศษ
-                            </Badge>
-                          )}
-                        </div>
-                      </td>
-                      <td className="px-6 py-4">{user?.name}</td>
-                      <td className="px-6 py-4">{claim.periodMonth}</td>
-                      <td className="px-6 py-4 font-bold">฿{claim.totalAmount.toLocaleString()}</td>
-                      <td className="px-6 py-4">
-                        <Badge variant="outline">{claim.status}</Badge>
-                      </td>
-                      <td className="px-6 py-4 text-right">
-                        <Button 
-                          variant="ghost" 
-                          size="sm" 
-                          onClick={() => navigate(`/claims/${claim.id}`)}
-                          title="ดูรายละเอียด"
-                        >
-                          <Eye className="h-4 w-4 text-blue-600" />
-                        </Button>
-                      </td>
+      return (
+        <div className="space-y-4">
+          {Object.values(userGroups).map((group: any) => (
+            <Card key={group.user?.id || 'unknown'} className="overflow-hidden">
+              <div className="bg-slate-50 p-4 border-b flex justify-between items-center">
+                <div className="flex items-center gap-3">
+                  <h3 className="font-bold text-lg">{group.user?.name || 'Unknown User'}</h3>
+                  <Badge variant="secondary">{group.claims.length} รายการ</Badge>
+                </div>
+                <div className="flex items-center gap-4">
+                  <span className="font-bold text-lg text-blue-600">฿{group.total.toLocaleString()}</span>
+                  <Button variant="outline" size="sm" onClick={() => handleExport('excel')} className="bg-white">
+                    <Download className="mr-2 h-4 w-4" /> พิมพ์ชุดนี้
+                  </Button>
+                </div>
+              </div>
+              <CardContent className="p-0">
+                <table className="w-full text-sm text-left">
+                  <thead className="text-xs text-gray-700 uppercase bg-gray-50 border-b">
+                    <tr>
+                      <th className="px-6 py-3">รหัส Claim</th>
+                      <th className="px-6 py-3">รอบบัญชี</th>
+                      <th className="px-6 py-3">ยอดรวม</th>
+                      <th className="px-6 py-3">สถานะ</th>
+                      <th className="px-6 py-3 text-right">จัดการ</th>
                     </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
-        </CardContent>
-      </Card>
-    </div>
-  );
+                  </thead>
+                  <tbody>
+                    {group.claims.map((claim: any) => (
+                      <tr key={claim.id} className="bg-white border-b hover:bg-gray-50">
+                        <td className="px-6 py-4 font-medium">
+                          <div className="flex items-center gap-2">
+                            {claim.id}
+                            {claim.isSpecial && (
+                              <Badge variant="outline" className="text-orange-600 border-orange-200 bg-orange-50 text-[10px]">
+                                กรณีพิเศษ
+                              </Badge>
+                            )}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4">{claim.periodMonth}</td>
+                        <td className="px-6 py-4 font-bold">฿{claim.displayTotal.toLocaleString()}</td>
+                        <td className="px-6 py-4">
+                          <Badge variant="outline">{claim.status}</Badge>
+                        </td>
+                        <td className="px-6 py-4 text-right">
+                          <Button variant="ghost" size="sm" onClick={() => navigate(`/claims/${claim.id}`)}>
+                            <Eye className="h-4 w-4 text-blue-600" />
+                          </Button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </CardContent>
+            </Card>
+          ))}
+          {claimsList.length === 0 && <div className="text-center py-8 text-muted-foreground">ไม่มีข้อมูล</div>}
+        </div>
+      );
+    }
+
+    if (viewMode === 'project') {
+      // Group by project
+      const projectGroups = claimsList.reduce((acc, claim) => {
+        claim.filteredItems.forEach((item: any) => {
+          if (!acc[item.projectCodeId]) {
+            const project = projects.find(p => p.id === item.projectCodeId);
+            acc[item.projectCodeId] = { project, items: [], total: 0 };
+          }
+          acc[item.projectCodeId].items.push({ claim, item });
+          acc[item.projectCodeId].total += item.amount;
+        });
+        return acc;
+      }, {} as Record<string, any>);
+
+      return (
+        <div className="space-y-4">
+          {Object.values(projectGroups).map((group: any) => (
+            <Card key={group.project?.id || 'unknown'} className="overflow-hidden">
+              <div className="bg-slate-50 p-4 border-b flex justify-between items-center">
+                <div className="flex items-center gap-3">
+                  <h3 className="font-bold text-lg">{group.project ? `${group.project.code} - ${group.project.name}` : 'Unknown Project'}</h3>
+                  <Badge variant="secondary">{group.items.length} รายการย่อย</Badge>
+                </div>
+                <div className="flex items-center gap-4">
+                  <span className="font-bold text-lg text-blue-600">฿{group.total.toLocaleString()}</span>
+                  <Button variant="outline" size="sm" onClick={() => handleExport('excel')} className="bg-white">
+                    <Download className="mr-2 h-4 w-4" /> พิมพ์ชุดนี้
+                  </Button>
+                </div>
+              </div>
+              <CardContent className="p-0">
+                <table className="w-full text-sm text-left">
+                  <thead className="text-xs text-gray-700 uppercase bg-gray-50 border-b">
+                    <tr>
+                      <th className="px-6 py-3">รหัส Claim</th>
+                      <th className="px-6 py-3">ผู้ขอเบิก</th>
+                      <th className="px-6 py-3">ประเภท</th>
+                      <th className="px-6 py-3">ยอดรวม</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {group.items.map(({ claim, item }: any) => {
+                      const user = users.find(u => u.id === claim.userId);
+                      return (
+                        <tr key={item.id} className="bg-white border-b hover:bg-gray-50">
+                          <td className="px-6 py-4 font-medium">
+                            <div className="flex items-center gap-2">
+                              {claim.id}
+                            </div>
+                          </td>
+                          <td className="px-6 py-4">{user?.name}</td>
+                          <td className="px-6 py-4">{item.type === 'travel' ? 'ค่าเดินทาง' : 'เบิกจ่ายอื่นๆ'}</td>
+                          <td className="px-6 py-4 font-bold">฿{item.amount.toLocaleString()}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </CardContent>
+            </Card>
+          ))}
+          {claimsList.length === 0 && <div className="text-center py-8 text-muted-foreground">ไม่มีข้อมูล</div>}
+        </div>
+      );
+    }
+
+    // Default view (claim)
+    return (
+      <div className="space-y-4">
+        {selectedClaims.length > 0 && (
+          <div className="flex items-center justify-between p-4 bg-blue-50 border border-blue-200 rounded-lg">
+            <div className="flex items-center gap-4">
+              <span className="font-medium text-blue-800">เลือกแล้ว {selectedClaims.length} รายการ</span>
+              <div className="flex gap-2">
+                <Button variant="outline" size="sm" onClick={() => handleExport('excel')} className="bg-white">
+                  <Download className="mr-2 h-4 w-4" /> Excel
+                </Button>
+                <Button variant="outline" size="sm" onClick={() => handleExport('word')} className="bg-white">
+                  <Download className="mr-2 h-4 w-4" /> Word
+                </Button>
+              </div>
+            </div>
+            {actionButton}
+          </div>
+        )}
+
+        <Card>
+          <CardContent className="p-0">
+            <table className="w-full text-sm text-left">
+              <thead className="text-xs text-gray-700 uppercase bg-gray-50 border-b">
+                <tr>
+                  <th className="p-4">
+                    <Checkbox 
+                      checked={selectedClaims.length === claimsList.length && claimsList.length > 0}
+                      onCheckedChange={() => handleSelectAll(claimsList)}
+                    />
+                  </th>
+                  <th className="px-6 py-3">รหัส Claim</th>
+                  <th className="px-6 py-3">ผู้ขอเบิก</th>
+                  <th className="px-6 py-3">รอบบัญชี</th>
+                  <th className="px-6 py-3">ยอดรวม</th>
+                  <th className="px-6 py-3">สถานะ</th>
+                  <th className="px-6 py-3 text-right">จัดการ</th>
+                </tr>
+              </thead>
+              <tbody>
+                {claimsList.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} className="px-6 py-8 text-center text-muted-foreground">ไม่มีข้อมูล</td>
+                  </tr>
+                ) : (
+                  claimsList.map(claim => {
+                    const user = users.find(u => u.id === claim.userId);
+                    return (
+                      <tr key={claim.id} className="bg-white border-b hover:bg-gray-50">
+                        <td className="p-4">
+                          <Checkbox 
+                            checked={selectedClaims.includes(claim.id)}
+                            onCheckedChange={() => handleSelect(claim.id)}
+                          />
+                        </td>
+                        <td className="px-6 py-4 font-medium">
+                          <div className="flex items-center gap-2">
+                            {claim.id}
+                            {claim.isSpecial && (
+                              <Badge variant="outline" className="text-orange-600 border-orange-200 bg-orange-50 text-[10px]">
+                                กรณีพิเศษ
+                              </Badge>
+                            )}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4">{user?.name}</td>
+                        <td className="px-6 py-4">{claim.periodMonth}</td>
+                        <td className="px-6 py-4 font-bold">฿{claim.displayTotal.toLocaleString()}</td>
+                        <td className="px-6 py-4">
+                          <Badge variant="outline">{claim.status}</Badge>
+                        </td>
+                        <td className="px-6 py-4 text-right">
+                          <Button 
+                            variant="ghost" 
+                            size="sm" 
+                            onClick={() => navigate(`/claims/${claim.id}`)}
+                            title="ดูรายละเอียด"
+                          >
+                            <Eye className="h-4 w-4 text-blue-600" />
+                          </Button>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  };
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold tracking-tight">ฝ่ายบัญชี</h1>
+        <div className="flex items-center gap-2 bg-white p-1 rounded-lg border">
+          <Button 
+            variant={viewMode === 'claim' ? 'default' : 'ghost'} 
+            size="sm" 
+            onClick={() => setViewMode('claim')}
+          >
+            รายการเบิก
+          </Button>
+          <Button 
+            variant={viewMode === 'user' ? 'default' : 'ghost'} 
+            size="sm" 
+            onClick={() => setViewMode('user')}
+          >
+            รายบุคคล
+          </Button>
+        </div>
       </div>
 
       <div className="grid grid-cols-3 gap-4 mb-6">

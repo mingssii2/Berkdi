@@ -1,5 +1,6 @@
+'use client';
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useRouter } from 'next/navigation';
 import { useStore, ExpenseItem, ExpenseClaim } from '../store';
 import { Button } from '../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
@@ -25,7 +26,7 @@ import {
 
 export default function ClaimsList() {
   const { currentUser, items, claims, projects, updateItemStatus, createClaim, globalFilterProject, globalFilterPeriod } = useStore();
-  const navigate = useNavigate();
+  const router = useRouter();
   const [activeTab, setActiveTab] = useState('drafts');
   const [selectedItem, setSelectedItem] = useState<ExpenseItem | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -43,27 +44,12 @@ export default function ClaimsList() {
     return true;
   });
 
-  const filteredClaims = claims.map(c => {
-    let claimItems = items.filter(i => c.items.includes(i.id));
-    
-    // Filter items by project if global filter is active
-    if (globalFilterProject !== 'all') {
-      claimItems = claimItems.filter(i => i.projectCodeId === globalFilterProject);
-    }
-    
-    // Calculate new total based on filtered items
-    const newTotal = claimItems.reduce((sum, item) => sum + item.amount, 0);
-    
-    return {
-      ...c,
-      filteredItems: claimItems,
-      displayTotal: newTotal
-    };
-  }).filter(c => {
-    // Remove claims that have no items left after project filter
-    if (c.filteredItems.length === 0) return false;
-    // Filter by period
+  const filteredClaims = claims.filter(c => {
     if (globalFilterPeriod !== 'all' && c.periodMonth !== globalFilterPeriod) return false;
+    if (globalFilterProject !== 'all') {
+      const claimItems = items.filter(i => c.items.includes(i.id));
+      if (!claimItems.some(i => i.projectCodeId === globalFilterProject)) return false;
+    }
     return true;
   });
 
@@ -199,7 +185,7 @@ export default function ClaimsList() {
                         size="icon"
                         onClick={(e) => { 
                           e.stopPropagation(); 
-                          navigate(`/claims/new?type=${item.type}&edit=${item.id}`);
+                          router.push(`/claims/new?type=${item.type}&edit=${item.id}`);
                         }}
                         title="แก้ไขรายการ"
                       >
@@ -256,7 +242,7 @@ export default function ClaimsList() {
               <Card 
                 key={claim.id} 
                 className="cursor-pointer hover:bg-gray-50 transition-colors"
-                onClick={() => navigate(`/claims/${claim.id}`)}
+                onClick={() => router.push(`/claims/${claim.id}`)}
               >
                 <CardContent className="p-4 flex items-center justify-between">
                   <div className="flex items-center gap-4">
@@ -273,12 +259,12 @@ export default function ClaimsList() {
                         )}
                       </div>
                       <p className="text-sm text-muted-foreground">
-                        {claim.filteredItems.length} รายการ
+                        {claim.items.length} รายการ
                       </p>
                     </div>
                   </div>
                   <div className="text-right">
-                    <p className="font-bold text-lg">฿{claim.displayTotal.toLocaleString()}</p>
+                    <p className="font-bold text-lg">฿{claim.totalAmount.toLocaleString()}</p>
                     <Badge variant="outline" className={`mt-1 ${
                       claim.status === 'draft' ? 'bg-gray-100 text-gray-800' :
                       claim.status === 'waiting' ? 'bg-orange-100 text-orange-800' :

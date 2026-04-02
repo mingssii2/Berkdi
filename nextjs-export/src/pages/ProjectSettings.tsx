@@ -1,5 +1,6 @@
+'use client';
 import { useState, useEffect } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useRouter, useParams } from 'next/navigation';
 import { useStore } from '../store';
 import { Button } from '../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../components/ui/card';
@@ -9,32 +10,22 @@ import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Badge } from '../components/ui/badge';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '../components/ui/alert-dialog';
-import { ArrowLeft, Users, Map, Trash2, Plus, Search, Check, UserPlus } from 'lucide-react';
+import { ArrowLeft, Users, Map, Trash2, Plus, Search } from 'lucide-react';
 import { toast } from 'sonner';
 import { LocationPickerModal } from '../components/LocationPickerModal';
+
 import { ProjectCombobox } from '../components/ProjectCombobox';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger } from '../components/ui/dialog';
-import { ScrollArea } from '../components/ui/scroll-area';
-
-import { Autocomplete, useJsApiLoader } from '@react-google-maps/api';
-
-const libraries: ("places" | "geometry" | "drawing" | "visualization")[] = ['places'];
 
 export default function ProjectSettings() {
-  const { id } = useParams<{ id: string }>();
-  const navigate = useNavigate();
+  const params = useParams();
+  const id = params?.id as string;
+  const router = useRouter();
   const { currentUser, projects, users, projectMembers, projectRoutes, addProjectMember, removeProjectMember, addProjectRoute, removeProjectRoute } = useStore();
   
-  const { isLoaded } = useJsApiLoader({
-    id: 'google-map-script',
-    googleMapsApiKey: (import.meta as any).env.VITE_GOOGLE_MAPS_API_KEY || '',
-    libraries,
-  });
-
   const [activeTab, setActiveTab] = useState('team');
   const [selectedUserId, setSelectedUserId] = useState('');
-  const [addMemberDialogOpen, setAddMemberDialogOpen] = useState(false);
-  const [searchUserQuery, setSearchUserQuery] = useState('');
+  
+  // Delete confirmation state
   const [memberToDelete, setMemberToDelete] = useState<string | null>(null);
   const [routeToDelete, setRouteToDelete] = useState<string | null>(null);
   
@@ -42,10 +33,6 @@ export default function ProjectSettings() {
   const [origin, setOrigin] = useState('');
   const [destination, setDestination] = useState('');
   const [distance, setDistance] = useState('');
-
-  // Autocomplete instances
-  const [originAutocomplete, setOriginAutocomplete] = useState<google.maps.places.Autocomplete | null>(null);
-  const [destAutocomplete, setDestAutocomplete] = useState<google.maps.places.Autocomplete | null>(null);
 
   // Location Picker State
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -87,15 +74,6 @@ export default function ProjectSettings() {
 
   // Users not yet in the project
   const availableUsers = users.filter(u => !members.some(pm => pm.userId === u.id));
-
-  const filteredAvailableUsers = availableUsers.filter(u => 
-    u.name.toLowerCase().includes(searchUserQuery.toLowerCase())
-  );
-
-  const handleAddSpecificMember = (userId: string) => {
-    addProjectMember(project.id, userId);
-    toast.success('เพิ่มสมาชิกแล้ว');
-  };
 
   const handleAddMember = () => {
     if (!selectedUserId || !isManager) return;
@@ -158,62 +136,18 @@ export default function ProjectSettings() {
     return '';
   };
 
-  const onOriginLoad = (autocomplete: google.maps.places.Autocomplete) => {
-    setOriginAutocomplete(autocomplete);
-  };
-
-  const onDestLoad = (autocomplete: google.maps.places.Autocomplete) => {
-    setDestAutocomplete(autocomplete);
-  };
-
-  const onOriginPlaceChanged = () => {
-    if (originAutocomplete !== null) {
-      const place = originAutocomplete.getPlace();
-      if (place.formatted_address) {
-        setOrigin(place.formatted_address);
-      } else if (place.name) {
-        setOrigin(place.name);
-      }
-      
-      if (place.geometry?.location) {
-        setOriginLatLng({
-          lat: place.geometry.location.lat(),
-          lng: place.geometry.location.lng()
-        });
-      }
-    }
-  };
-
-  const onDestPlaceChanged = () => {
-    if (destAutocomplete !== null) {
-      const place = destAutocomplete.getPlace();
-      if (place.formatted_address) {
-        setDestination(place.formatted_address);
-      } else if (place.name) {
-        setDestination(place.name);
-      }
-      
-      if (place.geometry?.location) {
-        setDestLatLng({
-          lat: place.geometry.location.lat(),
-          lng: place.geometry.location.lng()
-        });
-      }
-    }
-  };
-
   return (
     <div className="max-w-3xl mx-auto space-y-6">
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div className="flex items-center gap-4 w-full sm:w-auto">
-          <Button variant="ghost" size="icon" onClick={() => navigate(-1)}>
+          <Button variant="ghost" size="icon" onClick={() => router.back()}>
             <ArrowLeft className="h-5 w-5" />
           </Button>
           <div className="flex-1 sm:w-64">
             <ProjectCombobox 
               projects={projects} 
               value={project.id} 
-              onChange={(newId) => navigate(`/my-projects/${newId}`)} 
+              onChange={(newId) => router.push(`/my-projects/${newId}`)} 
             />
           </div>
         </div>
@@ -270,60 +204,23 @@ export default function ProjectSettings() {
             
             <TabsContent value="team" className="mt-6 space-y-6">
               {isManager && (
-                <div className="flex justify-end">
-                  <Dialog open={addMemberDialogOpen} onOpenChange={setAddMemberDialogOpen}>
-                    <DialogTrigger asChild>
-                      <Button>
-                        <UserPlus className="mr-2 h-4 w-4" /> เพิ่มสมาชิกใหม่
-                      </Button>
-                    </DialogTrigger>
-                    <DialogContent className="sm:max-w-[425px]">
-                      <DialogHeader>
-                        <DialogTitle>เพิ่มสมาชิกใหม่</DialogTitle>
-                        <DialogDescription>
-                          ค้นหาและเลือกพนักงานเพื่อเพิ่มเข้าโครงการ {project.code}
-                        </DialogDescription>
-                      </DialogHeader>
-                      <div className="space-y-4 py-4">
-                        <div className="relative">
-                          <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                          <Input
-                            placeholder="ค้นหาชื่อพนักงาน..."
-                            className="pl-9"
-                            value={searchUserQuery}
-                            onChange={(e) => setSearchUserQuery(e.target.value)}
-                          />
-                        </div>
-                        <ScrollArea className="h-[300px] rounded-md border p-2">
-                          {filteredAvailableUsers.length === 0 ? (
-                            <div className="p-4 text-center text-sm text-muted-foreground">
-                              ไม่พบพนักงาน
-                            </div>
-                          ) : (
-                            <div className="space-y-2">
-                              {filteredAvailableUsers.map(user => (
-                                <div key={user.id} className="flex items-center justify-between p-2 hover:bg-slate-50 rounded-lg border border-transparent hover:border-slate-200 transition-colors">
-                                  <div>
-                                    <p className="font-medium text-sm">{user.name}</p>
-                                    <div className="flex gap-1 mt-1">
-                                      {user.roles.map(role => (
-                                        <Badge key={role} variant="secondary" className="text-[10px] px-1 py-0 h-4">
-                                          {role}
-                                        </Badge>
-                                      ))}
-                                    </div>
-                                  </div>
-                                  <Button size="sm" variant="outline" onClick={() => handleAddSpecificMember(user.id)}>
-                                    เพิ่ม
-                                  </Button>
-                                </div>
-                              ))}
-                            </div>
-                          )}
-                        </ScrollArea>
-                      </div>
-                    </DialogContent>
-                  </Dialog>
+                <div className="flex gap-4 items-end">
+                  <div className="space-y-2 flex-1">
+                    <Label>เพิ่มสมาชิกใหม่</Label>
+                    <Select value={selectedUserId} onValueChange={setSelectedUserId}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="เลือกพนักงาน..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {availableUsers.map(u => (
+                          <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <Button onClick={handleAddMember} disabled={!selectedUserId}>
+                    <Plus className="mr-2 h-4 w-4" /> เพิ่ม
+                  </Button>
                 </div>
               )}
 
@@ -372,22 +269,7 @@ export default function ProjectSettings() {
                 <div className="space-y-2">
                   <Label>ต้นทาง</Label>
                   <div className="flex gap-2">
-                    {isLoaded ? (
-                      <Autocomplete
-                        onLoad={onOriginLoad}
-                        onPlaceChanged={onOriginPlaceChanged}
-                        className="flex-1"
-                      >
-                        <Input 
-                          value={origin} 
-                          onChange={(e) => setOrigin(e.target.value)} 
-                          placeholder="เช่น บ้าน" 
-                          className="w-full"
-                        />
-                      </Autocomplete>
-                    ) : (
-                      <Input value={origin} onChange={(e) => setOrigin(e.target.value)} placeholder="กำลังโหลด..." disabled />
-                    )}
+                    <Input value={origin} onChange={(e) => setOrigin(e.target.value)} placeholder="เช่น บ้าน" />
                     <Button variant="outline" size="icon" onClick={() => openPicker('origin')}>
                       <Search className="w-4 h-4" />
                     </Button>
@@ -396,22 +278,7 @@ export default function ProjectSettings() {
                 <div className="space-y-2">
                   <Label>ปลายทาง</Label>
                   <div className="flex gap-2">
-                    {isLoaded ? (
-                      <Autocomplete
-                        onLoad={onDestLoad}
-                        onPlaceChanged={onDestPlaceChanged}
-                        className="flex-1"
-                      >
-                        <Input 
-                          value={destination} 
-                          onChange={(e) => setDestination(e.target.value)} 
-                          placeholder="เช่น ออฟฟิศ" 
-                          className="w-full"
-                        />
-                      </Autocomplete>
-                    ) : (
-                      <Input value={destination} onChange={(e) => setDestination(e.target.value)} placeholder="กำลังโหลด..." disabled />
-                    )}
+                    <Input value={destination} onChange={(e) => setDestination(e.target.value)} placeholder="เช่น ออฟฟิศ" />
                     <Button variant="outline" size="icon" onClick={() => openPicker('destination')}>
                       <Search className="w-4 h-4" />
                     </Button>

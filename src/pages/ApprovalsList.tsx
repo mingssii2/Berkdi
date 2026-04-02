@@ -1,24 +1,42 @@
+import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useStore } from '../store';
+import { useStore, ItemStatus } from '../store';
 import { Card, CardContent } from '../components/ui/card';
 import { Badge } from '../components/ui/badge';
-import { FileText, AlertCircle } from 'lucide-react';
+import { Button } from '../components/ui/button';
+import { FileText, AlertCircle, CheckCircle2, XCircle } from 'lucide-react';
+import { toast } from 'sonner';
 
 export default function ApprovalsList() {
-  const { currentUser, claims, projects, users, items, globalFilterProject, globalFilterPeriod } = useStore();
+  const { currentUser, claims, projects, users, items, globalFilterProject, globalFilterPeriod, approveClaim, ceoApproveClaim } = useStore();
   const navigate = useNavigate();
 
   if (!currentUser) return null;
 
   const role = currentUser.activeRole;
 
-  // Apply global filters
-  const filteredClaims = claims.filter(c => {
-    if (globalFilterPeriod !== 'all' && c.periodMonth !== globalFilterPeriod) return false;
+  // Apply global filters and recalculate totals
+  const filteredClaims = claims.map(c => {
+    let claimItems = items.filter(i => c.items.includes(i.id));
+    
+    // Filter items by project if global filter is active
     if (globalFilterProject !== 'all') {
-      const claimItems = items.filter(i => c.items.includes(i.id));
-      if (!claimItems.some(i => i.projectCodeId === globalFilterProject)) return false;
+      claimItems = claimItems.filter(i => i.projectCodeId === globalFilterProject);
     }
+    
+    // Calculate new total based on filtered items
+    const newTotal = claimItems.reduce((sum, item) => sum + item.amount, 0);
+    
+    return {
+      ...c,
+      filteredItems: claimItems,
+      displayTotal: newTotal
+    };
+  }).filter(c => {
+    // Remove claims that have no items left after project filter
+    if (c.filteredItems.length === 0) return false;
+    // Filter by period
+    if (globalFilterPeriod !== 'all' && c.periodMonth !== globalFilterPeriod) return false;
     return true;
   });
 
@@ -29,12 +47,24 @@ export default function ApprovalsList() {
     pendingClaims = filteredClaims.filter(c => {
       if (c.status !== 'waiting') return false;
       // Check if any item in the claim belongs to a project managed by the current user
-      const claimItems = items.filter(i => c.items.includes(i.id));
-      return claimItems.some(i => myProjectIds.includes(i.projectCodeId));
+      return c.filteredItems.some((i: any) => myProjectIds.includes(i.projectCodeId));
     });
   } else if (role === 'ceo') {
     pendingClaims = filteredClaims.filter(c => c.status === 'ceo_pending');
   }
+
+  const handleQuickApprove = (e: React.MouseEvent, claim: any) => {
+    e.stopPropagation();
+    if (role === 'manager') {
+      const newStatuses: Record<string, ItemStatus> = {};
+      claim.filteredItems.forEach((i: any) => newStatuses[i.id] = 'approved');
+      approveClaim(claim.id, newStatuses);
+      toast.success('อนุมัติ Claim แล้ว');
+    } else if (role === 'ceo') {
+      ceoApproveClaim(claim.id);
+      toast.success('CEO อนุมัติแล้ว');
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -61,7 +91,7 @@ export default function ApprovalsList() {
                 className="cursor-pointer hover:bg-gray-50 transition-colors border-l-4 border-l-orange-500"
                 onClick={() => navigate(`/approvals/${claim.id}/review`)}
               >
-                <CardContent className="p-4 flex items-center justify-between">
+                <CardContent className="p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
                   <div className="flex items-center gap-4">
                     <div className="p-2 bg-orange-100 text-orange-600 rounded-full">
                       <FileText className="h-5 w-5" />
@@ -76,15 +106,27 @@ export default function ApprovalsList() {
                         )}
                       </div>
                       <p className="text-sm text-muted-foreground">
-                        {claim.items.length} รายการ
+                        {claim.filteredItems.length} รายการ
                       </p>
                     </div>
                   </div>
-                  <div className="text-right">
-                    <p className="font-bold text-lg">฿{claim.totalAmount.toLocaleString()}</p>
-                    <div className="flex items-center gap-1 text-xs text-orange-600 mt-1">
-                      <AlertCircle className="h-3 w-3" />
-                      <span>รอตรวจสอบ</span>
+                  <div className="flex flex-col sm:flex-row items-end sm:items-center gap-4 sm:gap-6 mt-4 sm:mt-0">
+                    <div className="text-right">
+                      <p className="font-bold text-lg">฿{claim.displayTotal.toLocaleString()}</p>
+                      <div className="flex items-center justify-end gap-1 text-xs text-orange-600 mt-1">
+                        <AlertCircle className="h-3 w-3" />
+                        <span>รอตรวจสอบ</span>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 sm:border-l sm:pl-6 w-full sm:w-auto">
+                      <Button 
+                        variant="outline" 
+                        size="sm"
+                        className="w-full sm:w-auto text-green-600 hover:text-green-700 hover:bg-green-50 border-green-200"
+                        onClick={(e) => handleQuickApprove(e, claim)}
+                      >
+                        <CheckCircle2 className="mr-1 h-4 w-4" /> อนุมัติทั้งหมด
+                      </Button>
                     </div>
                   </div>
                 </CardContent>

@@ -1,3 +1,4 @@
+'use client';
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { useJsApiLoader, GoogleMap, Autocomplete, DirectionsRenderer } from '@react-google-maps/api';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from './ui/dialog';
@@ -175,8 +176,8 @@ export function RoutePickerModal({ isOpen, onClose, onConfirm, initialOrigin, in
       <DialogContent className="sm:max-w-[600px] h-[85vh] flex flex-col p-0 overflow-hidden rounded-[24px]">
         <DialogHeader className="p-5 pb-3 bg-white z-20 shadow-sm">
           <DialogTitle className="text-xl font-bold text-slate-800">
-            {step === 'origin' && 'ระบุต้นทาง'}
-            {step === 'destination' && 'ระบุปลายทาง'}
+            {step === 'origin' && 'ระบุจุดรับ (ต้นทาง)'}
+            {step === 'destination' && 'ระบุจุดส่ง (ปลายทาง)'}
             {step === 'preview' && 'สรุปเส้นทาง'}
           </DialogTitle>
           
@@ -225,7 +226,7 @@ export function RoutePickerModal({ isOpen, onClose, onConfirm, initialOrigin, in
             <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-full pointer-events-none z-10 pb-1">
               <div className="relative flex flex-col items-center animate-bounce-short">
                 <div className={`px-3 py-1.5 rounded-full text-xs font-bold text-white shadow-md mb-1 whitespace-nowrap ${step === 'origin' ? 'bg-blue-600' : 'bg-red-600'}`}>
-                  {step === 'origin' ? 'ต้นทาง' : 'ปลายทาง'}
+                  {step === 'origin' ? 'รับที่นี่' : 'ส่งที่นี่'}
                 </div>
                 <MapPin className={`w-10 h-10 drop-shadow-lg ${step === 'origin' ? 'text-blue-600' : 'text-red-600'}`} fill="currentColor" />
                 <div className="w-2 h-2 bg-black/30 rounded-full absolute bottom-0 shadow-sm blur-[1px]"></div>
@@ -280,7 +281,7 @@ export function RoutePickerModal({ isOpen, onClose, onConfirm, initialOrigin, in
                   onClick={handleNextStep}
                   disabled={step === 'origin' ? !origin : !destination}
                 >
-                  {step === 'origin' ? 'ยืนยันต้นทาง' : 'ยืนยันปลายทาง'} <ArrowRight className="w-5 h-5 ml-2" />
+                  {step === 'origin' ? 'ยืนยันจุดรับ' : 'ยืนยันจุดส่ง'} <ArrowRight className="w-5 h-5 ml-2" />
                 </Button>
               </div>
             </div>

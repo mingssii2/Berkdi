@@ -1,5 +1,7 @@
+'use client';
 import { useState } from 'react';
-import { Outlet, useNavigate, useLocation , Link } from 'react-router-dom';
+import Link from 'next/link';
+import { useRouter, usePathname } from 'next/navigation';
 import { useStore, Role } from './store';
 import { Button } from './components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './components/ui/select';
@@ -9,15 +11,15 @@ import { Home, FileText, CheckSquare, DollarSign, Settings, LogOut, FolderKanban
 import { cn } from './lib/utils';
 import { format } from 'date-fns';
 
-export default function Layout() {
+export default function Layout({ children }: { children: React.ReactNode }) {
   const { 
     currentUser, switchRole, logout, 
     projects, claims,
     globalFilterProject, setGlobalFilterProject,
     globalFilterPeriod, setGlobalFilterPeriod
   } = useStore();
-  const navigate = useNavigate();
-  const location = useLocation();
+  const router = useRouter();
+  const pathname = usePathname();
   const [projectOpen, setProjectOpen] = useState(false);
 
   if (!currentUser) {
@@ -26,7 +28,7 @@ export default function Layout() {
         <div className="p-8 bg-white rounded-lg shadow-md text-center">
           <h1 className="text-2xl font-bold mb-4">ProExpense</h1>
           <p className="text-gray-600 mb-6">Please log in to continue</p>
-          <Button onClick={() => navigate('/login')}>Log In with Google</Button>
+          <Button onClick={() => router.push('/login')}>Log In with Google</Button>
         </div>
       </div>
     );
@@ -59,17 +61,17 @@ export default function Layout() {
       {/* Desktop Sidebar */}
       <aside className="hidden sm:flex flex-col w-64 bg-white border-r fixed h-full z-20">
         <div className="h-16 flex items-center px-6 border-b">
-          <Link to="/" className="text-xl font-bold text-blue-600">ProExpense</Link>
+          <Link href="/" className="text-xl font-bold text-blue-600">ProExpense</Link>
         </div>
         <nav className="flex-1 overflow-y-auto py-4">
           <ul className="space-y-1 px-3">
             {visibleNavItems.map((item) => {
               const Icon = item.icon;
-              const isActive = location.pathname === item.path || (item.path !== '/' && location.pathname.startsWith(item.path));
+              const isActive = pathname === item.path || (item.path !== '/' && pathname.startsWith(item.path));
               return (
                 <li key={item.name}>
                   <Link
-                    to={item.path}
+                    href={item.path}
                     className={cn(
                       "flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors",
                       isActive ? "bg-blue-50 text-blue-700" : "text-gray-700 hover:bg-gray-100"
@@ -90,7 +92,7 @@ export default function Layout() {
         {/* Header (Mobile & Desktop) */}
         <header className="bg-white border-b sticky top-0 z-10 h-16 flex items-center justify-between px-4 sm:px-6">
           <div className="flex items-center sm:hidden">
-            <Link to="/" className="text-xl font-bold text-blue-600">ProExpense</Link>
+            <Link href="/" className="text-xl font-bold text-blue-600">ProExpense</Link>
           </div>
           
           {/* Global Filters (Moved to a secondary bar below) */}
@@ -98,7 +100,7 @@ export default function Layout() {
             <div className="text-sm text-gray-600 hidden md:block">
               สวัสดี, {currentUser.name}
             </div>
-            <Select value={role} onValueChange={(val) => { switchRole(val as Role); navigate('/'); }}>
+            <Select value={role} onValueChange={(val) => { switchRole(val as Role); router.push('/'); }}>
               <SelectTrigger className="w-[130px] h-9">
                 <SelectValue placeholder="Select Role" />
               </SelectTrigger>
@@ -110,7 +112,7 @@ export default function Layout() {
                 ))}
               </SelectContent>
             </Select>
-            <Button variant="ghost" size="icon" onClick={() => { logout(); navigate('/login'); }}>
+            <Button variant="ghost" size="icon" onClick={() => { logout(); router.push('/login'); }}>
               <LogOut className="h-5 w-5" />
             </Button>
           </div>
@@ -212,11 +214,11 @@ export default function Layout() {
       <nav className="sm:hidden fixed bottom-0 w-full bg-white border-t flex justify-around pb-safe z-20">
         {visibleNavItems.map((item) => {
           const Icon = item.icon;
-          const isActive = location.pathname === item.path || (item.path !== '/' && location.pathname.startsWith(item.path));
+          const isActive = pathname === item.path || (item.path !== '/' && pathname.startsWith(item.path));
           return (
             <Link
               key={item.name}
-              to={item.path}
+              href={item.path}
               className={cn(
                 "flex flex-col items-center py-3 px-2 text-[10px] font-medium w-full",
                 isActive ? "text-blue-600" : "text-gray-500 hover:text-gray-900"

@@ -1,3 +1,4 @@
+'use client';
 import React, { useState, useEffect } from 'react';
 import { useStore, PresetRoute } from '../store';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../components/ui/card';
@@ -7,19 +8,10 @@ import { Label } from '../components/ui/label';
 import { Plus, Trash2, MapPin, Home, Building, Search } from 'lucide-react';
 import { LocationPickerModal } from '../components/LocationPickerModal';
 import { toast } from 'sonner';
-import { Autocomplete, useJsApiLoader } from '@react-google-maps/api';
-
-const libraries: ("places" | "geometry" | "drawing" | "visualization")[] = ['places'];
 
 export default function Settings() {
   const { currentUser, updateUserSettings } = useStore();
   
-  const { isLoaded } = useJsApiLoader({
-    id: 'google-map-script',
-    googleMapsApiKey: (import.meta as any).env.VITE_GOOGLE_MAPS_API_KEY || '',
-    libraries,
-  });
-
   const [homeAddress, setHomeAddress] = useState(currentUser?.homeAddress || '');
   const [officeAddress, setOfficeAddress] = useState(currentUser?.officeAddress || '');
   const [presetRoutes, setPresetRoutes] = useState<PresetRoute[]>(currentUser?.presetRoutes || []);
@@ -28,12 +20,6 @@ export default function Settings() {
   const [newRouteOrigin, setNewRouteOrigin] = useState('');
   const [newRouteDestination, setNewRouteDestination] = useState('');
   const [newRouteDistance, setNewRouteDistance] = useState('');
-
-  // Autocomplete instances
-  const [homeAutocomplete, setHomeAutocomplete] = useState<google.maps.places.Autocomplete | null>(null);
-  const [officeAutocomplete, setOfficeAutocomplete] = useState<google.maps.places.Autocomplete | null>(null);
-  const [originAutocomplete, setOriginAutocomplete] = useState<google.maps.places.Autocomplete | null>(null);
-  const [destAutocomplete, setDestAutocomplete] = useState<google.maps.places.Autocomplete | null>(null);
 
   // Location Picker State
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -124,52 +110,6 @@ export default function Settings() {
     return '';
   };
 
-  const onHomePlaceChanged = () => {
-    if (homeAutocomplete !== null) {
-      const place = homeAutocomplete.getPlace();
-      if (place.formatted_address) setHomeAddress(place.formatted_address);
-      else if (place.name) setHomeAddress(place.name);
-    }
-  };
-
-  const onOfficePlaceChanged = () => {
-    if (officeAutocomplete !== null) {
-      const place = officeAutocomplete.getPlace();
-      if (place.formatted_address) setOfficeAddress(place.formatted_address);
-      else if (place.name) setOfficeAddress(place.name);
-    }
-  };
-
-  const onOriginPlaceChanged = () => {
-    if (originAutocomplete !== null) {
-      const place = originAutocomplete.getPlace();
-      if (place.formatted_address) setNewRouteOrigin(place.formatted_address);
-      else if (place.name) setNewRouteOrigin(place.name);
-      
-      if (place.geometry?.location) {
-        setOriginLatLng({
-          lat: place.geometry.location.lat(),
-          lng: place.geometry.location.lng()
-        });
-      }
-    }
-  };
-
-  const onDestPlaceChanged = () => {
-    if (destAutocomplete !== null) {
-      const place = destAutocomplete.getPlace();
-      if (place.formatted_address) setNewRouteDestination(place.formatted_address);
-      else if (place.name) setNewRouteDestination(place.name);
-      
-      if (place.geometry?.location) {
-        setDestLatLng({
-          lat: place.geometry.location.lat(),
-          lng: place.geometry.location.lng()
-        });
-      }
-    }
-  };
-
   return (
     <div className="space-y-6 max-w-4xl mx-auto">
       <h1 className="text-2xl font-bold">ตั้งค่าส่วนตัว (Settings)</h1>
@@ -183,22 +123,11 @@ export default function Settings() {
           <div className="space-y-2">
             <Label className="flex items-center gap-2"><Home className="w-4 h-4" /> ที่อยู่บ้าน</Label>
             <div className="flex gap-2">
-              {isLoaded ? (
-                <Autocomplete
-                  onLoad={setHomeAutocomplete}
-                  onPlaceChanged={onHomePlaceChanged}
-                  className="flex-1"
-                >
-                  <Input 
-                    value={homeAddress} 
-                    onChange={e => setHomeAddress(e.target.value)} 
-                    placeholder="เช่น บ้าน — ลาดพร้าว 71 กรุงเทพฯ" 
-                    className="w-full"
-                  />
-                </Autocomplete>
-              ) : (
-                <Input value={homeAddress} onChange={e => setHomeAddress(e.target.value)} placeholder="กำลังโหลด..." disabled />
-              )}
+              <Input 
+                value={homeAddress} 
+                onChange={e => setHomeAddress(e.target.value)} 
+                placeholder="เช่น บ้าน — ลาดพร้าว 71 กรุงเทพฯ" 
+              />
               <Button variant="outline" size="icon" onClick={() => openPicker('home')}>
                 <Search className="w-4 h-4" />
               </Button>
@@ -207,22 +136,11 @@ export default function Settings() {
           <div className="space-y-2">
             <Label className="flex items-center gap-2"><Building className="w-4 h-4" /> ที่อยู่ที่ทำงาน</Label>
             <div className="flex gap-2">
-              {isLoaded ? (
-                <Autocomplete
-                  onLoad={setOfficeAutocomplete}
-                  onPlaceChanged={onOfficePlaceChanged}
-                  className="flex-1"
-                >
-                  <Input 
-                    value={officeAddress} 
-                    onChange={e => setOfficeAddress(e.target.value)} 
-                    placeholder="เช่น สำนักงานใหญ่" 
-                    className="w-full"
-                  />
-                </Autocomplete>
-              ) : (
-                <Input value={officeAddress} onChange={e => setOfficeAddress(e.target.value)} placeholder="กำลังโหลด..." disabled />
-              )}
+              <Input 
+                value={officeAddress} 
+                onChange={e => setOfficeAddress(e.target.value)} 
+                placeholder="เช่น สำนักงานใหญ่" 
+              />
               <Button variant="outline" size="icon" onClick={() => openPicker('office')}>
                 <Search className="w-4 h-4" />
               </Button>
@@ -274,22 +192,7 @@ export default function Settings() {
               <div className="space-y-2">
                 <Label>ต้นทาง</Label>
                 <div className="flex gap-2">
-                  {isLoaded ? (
-                    <Autocomplete
-                      onLoad={setOriginAutocomplete}
-                      onPlaceChanged={onOriginPlaceChanged}
-                      className="flex-1"
-                    >
-                      <Input 
-                        value={newRouteOrigin} 
-                        onChange={e => setNewRouteOrigin(e.target.value)} 
-                        placeholder="ระบุต้นทาง" 
-                        className="w-full"
-                      />
-                    </Autocomplete>
-                  ) : (
-                    <Input value={newRouteOrigin} onChange={e => setNewRouteOrigin(e.target.value)} placeholder="กำลังโหลด..." disabled />
-                  )}
+                  <Input value={newRouteOrigin} onChange={e => setNewRouteOrigin(e.target.value)} placeholder="ระบุต้นทาง" />
                   <Button variant="outline" size="icon" onClick={() => openPicker('origin')}>
                     <Search className="w-4 h-4" />
                   </Button>
@@ -298,22 +201,7 @@ export default function Settings() {
               <div className="space-y-2">
                 <Label>ปลายทาง</Label>
                 <div className="flex gap-2">
-                  {isLoaded ? (
-                    <Autocomplete
-                      onLoad={setDestAutocomplete}
-                      onPlaceChanged={onDestPlaceChanged}
-                      className="flex-1"
-                    >
-                      <Input 
-                        value={newRouteDestination} 
-                        onChange={e => setNewRouteDestination(e.target.value)} 
-                        placeholder="ระบุปลายทาง" 
-                        className="w-full"
-                      />
-                    </Autocomplete>
-                  ) : (
-                    <Input value={newRouteDestination} onChange={e => setNewRouteDestination(e.target.value)} placeholder="กำลังโหลด..." disabled />
-                  )}
+                  <Input value={newRouteDestination} onChange={e => setNewRouteDestination(e.target.value)} placeholder="ระบุปลายทาง" />
                   <Button variant="outline" size="icon" onClick={() => openPicker('destination')}>
                     <Search className="w-4 h-4" />
                   </Button>

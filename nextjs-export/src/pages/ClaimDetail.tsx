@@ -1,5 +1,6 @@
+'use client';
 import { useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useRouter, useParams } from 'next/navigation';
 import { useStore, ExpenseItem } from '../store';
 import { Button } from '../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../components/ui/card';
@@ -11,8 +12,9 @@ import { toast } from 'sonner';
 import ItemDetailModal from '../components/ItemDetailModal';
 
 export default function ClaimDetail() {
-  const { id } = useParams<{ id: string }>();
-  const navigate = useNavigate();
+  const params = useParams();
+  const id = params?.id as string;
+  const router = useRouter();
   const { currentUser, claims, items, projects, submitClaim } = useStore();
   const [selectedItem, setSelectedItem] = useState<ExpenseItem | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -32,7 +34,7 @@ export default function ClaimDetail() {
     }
     submitClaim(claim.id);
     toast.success('ส่ง Claim เรียบร้อยแล้ว', {
-      action: { label: 'กลับ', onClick: () => navigate('/claims') }
+      action: { label: 'กลับ', onClick: () => router.push('/claims') }
     });
   };
 
@@ -45,7 +47,7 @@ export default function ClaimDetail() {
     <div className="max-w-3xl mx-auto space-y-6">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
-          <Button variant="ghost" size="icon" onClick={() => navigate(-1)}>
+          <Button variant="ghost" size="icon" onClick={() => router.back()}>
             <ArrowLeft className="h-5 w-5" />
           </Button>
           <h1 className="text-2xl font-bold tracking-tight">รายละเอียด Claim</h1>

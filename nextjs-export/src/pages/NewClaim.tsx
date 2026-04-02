@@ -1,5 +1,6 @@
+'use client';
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useSearchParams, useRouter } from 'next/navigation';
 import { useStore, PresetRoute } from '../store';
 import { Button } from '../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../components/ui/card';
@@ -9,9 +10,8 @@ import { Checkbox } from '../components/ui/checkbox';
 import { toast } from 'sonner';
 import { MapPin, Camera, UploadCloud, CheckCircle2, AlertTriangle, XCircle, Calendar as CalendarIcon, Home, Building, Route, Search, Navigation, ArrowRightLeft } from 'lucide-react';
 import { format } from 'date-fns';
-import { useJsApiLoader, GoogleMap, DirectionsService, DirectionsRenderer, Autocomplete } from '@react-google-maps/api';
+import { useJsApiLoader, GoogleMap, DirectionsService, DirectionsRenderer } from '@react-google-maps/api';
 import { RoutePickerModal } from '../components/RoutePickerModal';
-import { LocationPickerModal } from '../components/LocationPickerModal';
 import { ProjectCombobox } from '../components/ProjectCombobox';
 import { Calendar } from '../components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '../components/ui/popover';
@@ -27,11 +27,11 @@ const mockCalendarEvents = [
 ];
 
 export default function NewClaim() {
-  const [searchParams] = useSearchParams();
+  const searchParams = useSearchParams();
   const type = searchParams.get('type') || 'travel';
   const editId = searchParams.get('edit');
   const { currentUser, projects, addExpenseItem, updateItem, items } = useStore();
-  const navigate = useNavigate();
+  const router = useRouter();
 
   const [projectId, setProjectId] = useState<string>('');
   const [dates, setDates] = useState<Date[]>([new Date()]);
@@ -48,27 +48,6 @@ export default function NewClaim() {
   const [returnDistance, setReturnDistance] = useState<number>(0);
   const [isReturnManualDistance, setIsReturnManualDistance] = useState<boolean>(false);
   const [returnDirectionsResponse, setReturnDirectionsResponse] = useState<google.maps.DirectionsResult | null>(null);
-
-  const [isLocationPickerOpen, setIsLocationPickerOpen] = useState(false);
-  const [pickerType, setPickerType] = useState<'origin' | 'destination'>('origin');
-  const [originAutocomplete, setOriginAutocomplete] = useState<google.maps.places.Autocomplete | null>(null);
-  const [destAutocomplete, setDestAutocomplete] = useState<google.maps.places.Autocomplete | null>(null);
-
-  const onOriginPlaceChanged = () => {
-    if (originAutocomplete !== null) {
-      const place = originAutocomplete.getPlace();
-      setOrigin(place.formatted_address || place.name || '');
-      setIsManualDistance(false);
-    }
-  };
-
-  const onDestPlaceChanged = () => {
-    if (destAutocomplete !== null) {
-      const place = destAutocomplete.getPlace();
-      setDestination(place.formatted_address || place.name || '');
-      setIsManualDistance(false);
-    }
-  };
 
   // Misc specific
   const [description, setDescription] = useState<string>('');
@@ -243,7 +222,7 @@ export default function NewClaim() {
         toast.success(`บันทึกรายการแล้ว ${dates.length * (isRoundTrip ? 2 : 1)} รายการ · ฿${(totalTravelAmount * dates.length).toFixed(2)}`);
       }
       
-      navigate('/claims');
+      router.push('/claims');
     } else {
       if (!description || !amount) return;
       
@@ -272,7 +251,7 @@ export default function NewClaim() {
         toast.success(`บันทึกรายการแล้ว ${dates.length} รายการ · ฿${(amount * dates.length).toFixed(2)}`);
       }
       
-      navigate('/claims');
+      router.push('/claims');
     }
   };
 
@@ -371,7 +350,7 @@ export default function NewClaim() {
       toast.success('เลือกเส้นทาง ที่ทำงาน -> บ้าน');
     } else {
       toast.error('กรุณาตั้งค่าที่อยู่บ้านและที่ทำงานในหน้าตั้งค่าก่อน');
-      navigate('/settings');
+      router.push('/settings');
     }
   };
 
@@ -381,7 +360,7 @@ export default function NewClaim() {
         <h1 className="text-2xl font-bold tracking-tight text-slate-800">
           {type === 'travel' ? 'เบิกค่าเดินทาง' : 'เบิกค่าใช้จ่ายอื่นๆ'}
         </h1>
-        <Button variant="ghost" className="text-slate-500 hover:text-slate-800" onClick={() => navigate(-1)}>ยกเลิก</Button>
+        <Button variant="ghost" className="text-slate-500 hover:text-slate-800" onClick={() => router.back()}>ยกเลิก</Button>
       </div>
 
       <Card className="shadow-sm rounded-2xl border-slate-200">
@@ -525,64 +504,31 @@ export default function NewClaim() {
                   </div>
                 </div>
 
-                <div className="space-y-4">
-                  <div className="space-y-2">
-                    <Label className="text-slate-700">ต้นทาง</Label>
-                    <div className="flex gap-2">
-                      <div className="relative flex-1">
-                        <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400 z-20" />
-                        {isLoaded ? (
-                          <Autocomplete onLoad={setOriginAutocomplete} onPlaceChanged={onOriginPlaceChanged}>
-                            <Input 
-                              placeholder="ค้นหาต้นทาง..."
-                              className="pl-10 h-12 rounded-xl bg-slate-50 border-slate-200"
-                              value={origin}
-                              onChange={(e) => { setOrigin(e.target.value); setIsManualDistance(false); }}
-                            />
-                          </Autocomplete>
-                        ) : (
-                          <Input 
-                            placeholder="ค้นหาต้นทาง..."
-                            className="pl-10 h-12 rounded-xl bg-slate-50 border-slate-200"
-                            value={origin}
-                            onChange={(e) => { setOrigin(e.target.value); setIsManualDistance(false); }}
-                          />
-                        )}
+                <div className="space-y-3">
+                  <Label className="text-slate-700">เส้นทางเดินทาง</Label>
+                  <Card 
+                    className="overflow-hidden rounded-2xl border-slate-200 shadow-sm cursor-pointer hover:border-blue-300 hover:shadow-md transition-all group" 
+                    onClick={() => setIsRoutePickerOpen(true)}
+                  >
+                    <div className="p-4 flex flex-col gap-4 relative">
+                      {/* Vertical line connecting origin and dest */}
+                      <div className="absolute left-[27px] top-[40px] bottom-[40px] w-[2px] bg-slate-100 group-hover:bg-blue-100 transition-colors"></div>
+                      
+                      <div className="flex items-center gap-4">
+                        <div className="w-3.5 h-3.5 rounded-full bg-blue-500 z-10 ring-4 ring-white"></div>
+                        <div className={`flex-1 text-base font-medium truncate ${origin ? 'text-slate-900' : 'text-slate-400'}`}>
+                          {origin || 'ระบุจุดรับ (ต้นทาง)'}
+                        </div>
                       </div>
-                      <Button variant="outline" className="h-12 w-12 shrink-0 rounded-xl" onClick={() => { setPickerType('origin'); setIsLocationPickerOpen(true); }}>
-                        <Search className="h-5 w-5" />
-                      </Button>
-                    </div>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label className="text-slate-700">ปลายทาง</Label>
-                    <div className="flex gap-2">
-                      <div className="relative flex-1">
-                        <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400 z-20" />
-                        {isLoaded ? (
-                          <Autocomplete onLoad={setDestAutocomplete} onPlaceChanged={onDestPlaceChanged}>
-                            <Input 
-                              placeholder="ค้นหาปลายทาง..."
-                              className="pl-10 h-12 rounded-xl bg-slate-50 border-slate-200"
-                              value={destination}
-                              onChange={(e) => { setDestination(e.target.value); setIsManualDistance(false); }}
-                            />
-                          </Autocomplete>
-                        ) : (
-                          <Input 
-                            placeholder="ค้นหาปลายทาง..."
-                            className="pl-10 h-12 rounded-xl bg-slate-50 border-slate-200"
-                            value={destination}
-                            onChange={(e) => { setDestination(e.target.value); setIsManualDistance(false); }}
-                          />
-                        )}
+                      
+                      <div className="flex items-center gap-4">
+                        <div className="w-3.5 h-3.5 rounded-full bg-red-500 z-10 ring-4 ring-white"></div>
+                        <div className={`flex-1 text-base font-medium truncate ${destination ? 'text-slate-900' : 'text-slate-400'}`}>
+                          {destination || 'ระบุจุดส่ง (ปลายทาง)'}
+                        </div>
                       </div>
-                      <Button variant="outline" className="h-12 w-12 shrink-0 rounded-xl" onClick={() => { setPickerType('destination'); setIsLocationPickerOpen(true); }}>
-                        <Search className="h-5 w-5" />
-                      </Button>
                     </div>
-                  </div>
+                  </Card>
                 </div>
 
                 <div className="space-y-3">
@@ -783,20 +729,6 @@ export default function NewClaim() {
         onConfirm={handleRouteConfirm}
         initialOrigin={origin}
         initialDestination={destination}
-      />
-
-      <LocationPickerModal
-        isOpen={isLocationPickerOpen}
-        onClose={() => setIsLocationPickerOpen(false)}
-        initialAddress={pickerType === 'origin' ? origin : destination}
-        onConfirm={(address) => {
-          if (pickerType === 'origin') {
-            setOrigin(address);
-          } else {
-            setDestination(address);
-          }
-          setIsManualDistance(false);
-        }}
       />
     </div>
   );
