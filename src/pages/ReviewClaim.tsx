@@ -10,6 +10,8 @@ import { Car, Camera, CheckCircle2, XCircle, ArrowLeft, CornerUpLeft, Eye } from
 import { toast } from 'sonner';
 import ItemDetailModal from '../components/ItemDetailModal';
 
+import { formatLocationName } from '../lib/utils';
+
 export default function ReviewClaim() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -133,7 +135,7 @@ export default function ReviewClaim() {
                     </div>
                     <div>
                       <p className="font-medium text-lg">
-                        {index + 1}. {item.type === 'travel' ? 'ค่าเดินทาง' : item.description}
+                        {index + 1}. {item.type === 'travel' ? `ค่าเดินทาง ${formatLocationName(item.origin)} -> ${formatLocationName(item.destination)}` : item.description}
                       </p>
                       <p className="text-sm text-muted-foreground">
                         {format(new Date(item.date), 'dd MMM yyyy', { locale: th })} · โครงการ {itemProject?.name || item.projectCodeId}
@@ -141,7 +143,7 @@ export default function ReviewClaim() {
                       {item.type === 'travel' && (
                         <div className="mt-2 p-3 bg-white rounded border text-sm">
                           <p className="font-medium text-gray-700">📍 Map Proof</p>
-                          <p className="text-gray-600">{item.origin} → {item.destination}</p>
+                          <p className="text-gray-600">{formatLocationName(item.origin)} → {formatLocationName(item.destination)}</p>
                           <p className="text-gray-500">{item.distance} km × ฿7 = ฿{item.amount.toFixed(2)}</p>
                         </div>
                       )}

@@ -21,6 +21,7 @@ import AdminDashboard from './pages/AdminDashboard';
 import MyProjects from './pages/MyProjects';
 import ProjectSettings from './pages/ProjectSettings';
 import Settings from './pages/Settings';
+import CalendarImport from './pages/CalendarImport';
 
 export default function App() {
   return (
@@ -30,6 +31,7 @@ export default function App() {
         <Route path="/" element={<Layout />}>
           <Route index element={<Dashboard />} />
           <Route path="claims/new" element={<NewClaim />} />
+          <Route path="claims/calendar" element={<CalendarImport />} />
           <Route path="claims" element={<ClaimsList />} />
           <Route path="claims/:id" element={<ClaimDetail />} />
           <Route path="approvals" element={<ApprovalsList />} />

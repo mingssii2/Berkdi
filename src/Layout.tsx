@@ -5,26 +5,29 @@ import { Button } from './components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './components/ui/select';
 import { Popover, PopoverContent, PopoverTrigger } from './components/ui/popover';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from './components/ui/command';
-import { Home, FileText, CheckSquare, DollarSign, Settings, LogOut, FolderKanban, Check, ChevronsUpDown, UserCog } from 'lucide-react';
+import { Home, FileText, CheckSquare, DollarSign, Settings, LogOut, FolderKanban, Check, ChevronsUpDown, UserCog, ChevronLeft, Filter } from 'lucide-react';
 import { cn } from './lib/utils';
 import { format } from 'date-fns';
 
 export default function Layout() {
   const { 
     currentUser, switchRole, logout, 
-    projects, claims,
+    projects, claims, users,
     globalFilterProject, setGlobalFilterProject,
-    globalFilterPeriod, setGlobalFilterPeriod
+    globalFilterPeriod, setGlobalFilterPeriod,
+    globalFilterUser, setGlobalFilterUser,
+    isFilterOpen, toggleFilter
   } = useStore();
   const navigate = useNavigate();
   const location = useLocation();
   const [projectOpen, setProjectOpen] = useState(false);
+  const [userOpen, setUserOpen] = useState(false);
 
   if (!currentUser) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-gray-50">
         <div className="p-8 bg-white rounded-lg shadow-md text-center">
-          <h1 className="text-2xl font-bold mb-4">ProExpense</h1>
+          <h1 className="text-2xl font-bold mb-4">BerkDI</h1>
           <p className="text-gray-600 mb-6">Please log in to continue</p>
           <Button onClick={() => navigate('/login')}>Log In with Google</Button>
         </div>
@@ -54,12 +57,18 @@ export default function Layout() {
     ? { id: 'all', code: 'ALL', name: 'ทั้งหมด' } 
     : projects.find(p => p.id === globalFilterProject);
 
+  const selectedUser = globalFilterUser === 'all'
+    ? { id: 'all', name: 'ทุกคน' }
+    : users.find(u => u.id === globalFilterUser);
+
+  const canFilterUser = ['manager', 'accounting', 'admin'].includes(role);
+
   return (
     <div className="min-h-screen bg-gray-50 flex">
       {/* Desktop Sidebar */}
       <aside className="hidden sm:flex flex-col w-64 bg-white border-r fixed h-full z-20">
         <div className="h-16 flex items-center px-6 border-b">
-          <Link to="/" className="text-xl font-bold text-blue-600">ProExpense</Link>
+          <Link to="/" className="text-xl font-bold text-blue-600">BerkDI</Link>
         </div>
         <nav className="flex-1 overflow-y-auto py-4">
           <ul className="space-y-1 px-3">
@@ -89,13 +98,21 @@ export default function Layout() {
       <div className="flex-1 flex flex-col sm:ml-64 min-h-screen min-w-0">
         {/* Header (Mobile & Desktop) */}
         <header className="bg-white border-b sticky top-0 z-10 h-16 flex items-center justify-between px-4 sm:px-6">
-          <div className="flex items-center sm:hidden">
-            <Link to="/" className="text-xl font-bold text-blue-600">ProExpense</Link>
+          <div className="flex items-center gap-2">
+            <Button variant="ghost" size="icon" onClick={() => navigate(-1)} className="mr-1">
+              <ChevronLeft className="h-5 w-5" />
+            </Button>
+            <div className="flex items-center sm:hidden">
+              <Link to="/" className="text-xl font-bold text-blue-600">BerkDI</Link>
+            </div>
           </div>
           
           {/* Global Filters (Moved to a secondary bar below) */}
-          <div className="flex items-center space-x-4 ml-auto">
-            <div className="text-sm text-gray-600 hidden md:block">
+          <div className="flex items-center space-x-2 ml-auto">
+            <Button variant="ghost" size="icon" onClick={toggleFilter} className={isFilterOpen ? 'bg-blue-50 text-blue-600' : ''}>
+              <Filter className="h-5 w-5" />
+            </Button>
+            <div className="text-sm text-gray-600 hidden md:block mr-2">
               สวัสดี, {currentUser.name}
             </div>
             <Select value={role} onValueChange={(val) => { switchRole(val as Role); navigate('/'); }}>
@@ -117,90 +134,159 @@ export default function Layout() {
         </header>
 
         {/* Secondary Filter Bar */}
-        <div className="bg-white border-b px-4 sm:px-6 py-3 space-y-3 shadow-sm z-0 w-full overflow-hidden flex flex-col sm:flex-row sm:space-y-0 sm:gap-4 items-start sm:items-center">
-          {/* Project Filter */}
-          <div className="flex items-center gap-3 w-full sm:w-auto">
-            <span className="text-sm font-medium text-gray-500 whitespace-nowrap shrink-0">โครงการ:</span>
-            <Popover open={projectOpen} onOpenChange={setProjectOpen}>
-              <PopoverTrigger 
-                render={
-                  <Button
-                    variant="outline"
-                    role="combobox"
-                    aria-expanded={projectOpen}
-                    className="w-full sm:w-[250px] justify-between"
-                  >
-                    <span className="truncate">
-                      {selectedProject ? (selectedProject.id === 'all' ? 'ทั้งหมด' : `${selectedProject.code} - ${selectedProject.name}`) : "เลือกโครงการ..."}
-                    </span>
-                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                  </Button>
-                }
-              />
-              <PopoverContent className="w-[300px] p-0" align="start">
-                <Command>
-                  <CommandInput placeholder="ค้นหาโครงการ..." />
-                  <CommandList>
-                    <CommandEmpty>ไม่พบโครงการ</CommandEmpty>
-                    <CommandGroup>
-                      <CommandItem
-                        value="all"
-                        onSelect={() => {
-                          setGlobalFilterProject('all');
-                          setProjectOpen(false);
-                        }}
-                      >
-                        <Check
-                          className={cn(
-                            "mr-2 h-4 w-4",
-                            globalFilterProject === 'all' ? "opacity-100" : "opacity-0"
-                          )}
-                        />
-                        ทั้งหมด
-                      </CommandItem>
-                      {projects.map((p) => (
+        {isFilterOpen && (
+          <div className="bg-white border-b px-4 sm:px-6 py-3 space-y-3 shadow-sm z-0 w-full overflow-hidden flex flex-col sm:flex-row sm:space-y-0 sm:gap-4 items-start sm:items-center">
+            {/* Project Filter */}
+            <div className="flex items-center gap-3 w-full sm:w-auto">
+              <span className="text-sm font-medium text-gray-500 whitespace-nowrap shrink-0">โครงการ:</span>
+              <Popover open={projectOpen} onOpenChange={setProjectOpen}>
+                <PopoverTrigger 
+                  render={
+                    <Button
+                      variant="outline"
+                      role="combobox"
+                      aria-expanded={projectOpen}
+                      className="w-full sm:w-[250px] justify-between"
+                    >
+                      <span className="truncate">
+                        {selectedProject ? (selectedProject.id === 'all' ? 'ทั้งหมด' : `${selectedProject.code} - ${selectedProject.name}`) : "เลือกโครงการ..."}
+                      </span>
+                      <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                    </Button>
+                  }
+                />
+                <PopoverContent className="w-[300px] p-0" align="start">
+                  <Command>
+                    <CommandInput placeholder="ค้นหาโครงการ..." />
+                    <CommandList>
+                      <CommandEmpty>ไม่พบโครงการ</CommandEmpty>
+                      <CommandGroup>
                         <CommandItem
-                          key={p.id}
-                          value={`${p.code} ${p.name}`}
+                          value="all"
                           onSelect={() => {
-                            setGlobalFilterProject(p.id);
+                            setGlobalFilterProject('all');
                             setProjectOpen(false);
                           }}
                         >
                           <Check
                             className={cn(
                               "mr-2 h-4 w-4",
-                              globalFilterProject === p.id ? "opacity-100" : "opacity-0"
+                              globalFilterProject === 'all' ? "opacity-100" : "opacity-0"
                             )}
                           />
-                          {p.code} - {p.name}
+                          ทั้งหมด
                         </CommandItem>
-                      ))}
-                    </CommandGroup>
-                  </CommandList>
-                </Command>
-              </PopoverContent>
-            </Popover>
-          </div>
+                        {projects.map((p) => (
+                          <CommandItem
+                            key={p.id}
+                            value={`${p.code} ${p.name}`}
+                            onSelect={() => {
+                              setGlobalFilterProject(p.id);
+                              setProjectOpen(false);
+                            }}
+                          >
+                            <Check
+                              className={cn(
+                                "mr-2 h-4 w-4",
+                                globalFilterProject === p.id ? "opacity-100" : "opacity-0"
+                              )}
+                            />
+                            {p.code} - {p.name}
+                          </CommandItem>
+                        ))}
+                      </CommandGroup>
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              </Popover>
+            </div>
 
-          {/* Period Filter */}
-          <div className="flex items-center gap-3 w-full sm:w-auto">
-            <span className="text-sm font-medium text-gray-500 whitespace-nowrap shrink-0">รอบบัญชี:</span>
-            <Select value={globalFilterPeriod} onValueChange={setGlobalFilterPeriod}>
-              <SelectTrigger className="w-full sm:w-[150px]">
-                <SelectValue placeholder="เลือกรอบบัญชี" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">ทั้งหมด</SelectItem>
-                {uniquePeriods.map(period => (
-                  <SelectItem key={period} value={period}>
-                    {period}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            {/* Period Filter */}
+            <div className="flex items-center gap-3 w-full sm:w-auto">
+              <span className="text-sm font-medium text-gray-500 whitespace-nowrap shrink-0">รอบบัญชี:</span>
+              <Select value={globalFilterPeriod} onValueChange={setGlobalFilterPeriod}>
+                <SelectTrigger className="w-full sm:w-[150px]">
+                  <SelectValue placeholder="เลือกรอบบัญชี" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">ทั้งหมด</SelectItem>
+                  {uniquePeriods.map(period => (
+                    <SelectItem key={period} value={period}>
+                      {period}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* User Filter */}
+            {canFilterUser && (
+              <div className="flex items-center gap-3 w-full sm:w-auto">
+                <span className="text-sm font-medium text-gray-500 whitespace-nowrap shrink-0">พนักงาน:</span>
+                <Popover open={userOpen} onOpenChange={setUserOpen}>
+                  <PopoverTrigger 
+                    render={
+                      <Button
+                        variant="outline"
+                        role="combobox"
+                        aria-expanded={userOpen}
+                        className="w-full sm:w-[200px] justify-between"
+                      >
+                        <span className="truncate">
+                          {selectedUser ? (selectedUser.id === 'all' ? 'ทุกคน' : selectedUser.name) : "เลือกพนักงาน..."}
+                        </span>
+                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                      </Button>
+                    }
+                  />
+                  <PopoverContent className="w-[250px] p-0" align="start">
+                    <Command>
+                      <CommandInput placeholder="ค้นหาพนักงาน..." />
+                      <CommandList>
+                        <CommandEmpty>ไม่พบพนักงาน</CommandEmpty>
+                        <CommandGroup>
+                          <CommandItem
+                            value="all"
+                            onSelect={() => {
+                              setGlobalFilterUser('all');
+                              setUserOpen(false);
+                            }}
+                          >
+                            <Check
+                              className={cn(
+                                "mr-2 h-4 w-4",
+                                globalFilterUser === 'all' ? "opacity-100" : "opacity-0"
+                              )}
+                            />
+                            ทุกคน
+                          </CommandItem>
+                          {users.map((u) => (
+                            <CommandItem
+                              key={u.id}
+                              value={u.name}
+                              onSelect={() => {
+                                setGlobalFilterUser(u.id);
+                                setUserOpen(false);
+                              }}
+                            >
+                              <Check
+                                className={cn(
+                                  "mr-2 h-4 w-4",
+                                  globalFilterUser === u.id ? "opacity-100" : "opacity-0"
+                                )}
+                              />
+                              {u.name}
+                            </CommandItem>
+                          ))}
+                        </CommandGroup>
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
+              </div>
+            )}
           </div>
-        </div>
+        )}
 
         {/* Main Content */}
         <main className="flex-1 p-4 sm:p-6 lg:p-8 pb-20 sm:pb-8 max-w-7xl mx-auto w-full">

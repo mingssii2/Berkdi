@@ -88,8 +88,12 @@ interface AppState {
   
   globalFilterProject: string;
   globalFilterPeriod: string;
+  globalFilterUser: string;
+  isFilterOpen: boolean;
   setGlobalFilterProject: (projectId: string) => void;
   setGlobalFilterPeriod: (period: string) => void;
+  setGlobalFilterUser: (userId: string) => void;
+  toggleFilter: () => void;
   
   login: (userId: string) => void;
   logout: () => void;
@@ -176,8 +180,12 @@ export const useStore = create<AppState>((set, get) => ({
 
   globalFilterProject: 'all',
   globalFilterPeriod: format(new Date(), 'yyyy-MM'),
+  globalFilterUser: 'all',
+  isFilterOpen: false,
   setGlobalFilterProject: (projectId) => set({ globalFilterProject: projectId }),
   setGlobalFilterPeriod: (period) => set({ globalFilterPeriod: period }),
+  setGlobalFilterUser: (userId) => set({ globalFilterUser: userId }),
+  toggleFilter: () => set((state) => ({ isFilterOpen: !state.isFilterOpen })),
 
   login: (userId) => set((state) => ({ currentUser: state.users.find(u => u.id === userId) || null })),
   logout: () => set({ currentUser: null }),

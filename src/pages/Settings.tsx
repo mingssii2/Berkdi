@@ -44,16 +44,16 @@ export default function Settings() {
 
   useEffect(() => {
     if (originLatLng && destLatLng && window.google) {
-      const service = new google.maps.DistanceMatrixService();
-      service.getDistanceMatrix(
+      const service = new google.maps.DirectionsService();
+      service.route(
         {
-          origins: [originLatLng],
-          destinations: [destLatLng],
+          origin: originLatLng,
+          destination: destLatLng,
           travelMode: google.maps.TravelMode.DRIVING,
         },
-        (response, status) => {
-          if (status === 'OK' && response && response.rows[0].elements[0].status === 'OK') {
-            const distanceInMeters = response.rows[0].elements[0].distance.value;
+        (result, status) => {
+          if (status === google.maps.DirectionsStatus.OK && result) {
+            const distanceInMeters = result.routes[0].legs[0].distance?.value || 0;
             setNewRouteDistance((distanceInMeters / 1000).toFixed(1));
           }
         }

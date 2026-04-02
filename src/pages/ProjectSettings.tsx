@@ -9,12 +9,13 @@ import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Badge } from '../components/ui/badge';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '../components/ui/alert-dialog';
-import { ArrowLeft, Users, Map, Trash2, Plus, Search, Check, UserPlus } from 'lucide-react';
+import { ArrowLeft, Users, Map, Trash2, Plus, Search, Check, UserPlus, LayoutDashboard, FileText, Settings, DollarSign, CheckSquare } from 'lucide-react';
 import { toast } from 'sonner';
 import { LocationPickerModal } from '../components/LocationPickerModal';
 import { ProjectCombobox } from '../components/ProjectCombobox';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger } from '../components/ui/dialog';
 import { ScrollArea } from '../components/ui/scroll-area';
+import { format } from 'date-fns';
 
 import { Autocomplete, useJsApiLoader } from '@react-google-maps/api';
 
@@ -23,7 +24,7 @@ const libraries: ("places" | "geometry" | "drawing" | "visualization")[] = ['pla
 export default function ProjectSettings() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { currentUser, projects, users, projectMembers, projectRoutes, addProjectMember, removeProjectMember, addProjectRoute, removeProjectRoute } = useStore();
+  const { currentUser, projects, users, projectMembers, projectRoutes, items, claims, globalFilterPeriod, globalFilterUser, addProjectMember, removeProjectMember, addProjectRoute, removeProjectRoute, updateProject } = useStore();
   
   const { isLoaded } = useJsApiLoader({
     id: 'google-map-script',
@@ -31,7 +32,7 @@ export default function ProjectSettings() {
     libraries,
   });
 
-  const [activeTab, setActiveTab] = useState('team');
+  const [activeTab, setActiveTab] = useState('dashboard');
   const [selectedUserId, setSelectedUserId] = useState('');
   const [addMemberDialogOpen, setAddMemberDialogOpen] = useState(false);
   const [searchUserQuery, setSearchUserQuery] = useState('');
@@ -53,18 +54,35 @@ export default function ProjectSettings() {
   const [originLatLng, setOriginLatLng] = useState<{lat: number, lng: number} | null>(null);
   const [destLatLng, setDestLatLng] = useState<{lat: number, lng: number} | null>(null);
 
+  const project = projects.find(p => p.id === id);
+
+  // Config State
+  const [configName, setConfigName] = useState(project?.name || '');
+  const [configCode, setConfigCode] = useState(project?.code || '');
+  const [configIsPublic, setConfigIsPublic] = useState(project?.isPublic || false);
+  const [configManagerId, setConfigManagerId] = useState(project?.managerId || '');
+
+  useEffect(() => {
+    if (project) {
+      setConfigName(project.name);
+      setConfigCode(project.code);
+      setConfigIsPublic(project.isPublic);
+      setConfigManagerId(project.managerId);
+    }
+  }, [project]);
+
   useEffect(() => {
     if (originLatLng && destLatLng && window.google) {
-      const service = new google.maps.DistanceMatrixService();
-      service.getDistanceMatrix(
+      const service = new google.maps.DirectionsService();
+      service.route(
         {
-          origins: [originLatLng],
-          destinations: [destLatLng],
+          origin: originLatLng,
+          destination: destLatLng,
           travelMode: google.maps.TravelMode.DRIVING,
         },
-        (response, status) => {
-          if (status === 'OK' && response && response.rows[0].elements[0].status === 'OK') {
-            const distanceInMeters = response.rows[0].elements[0].distance.value;
+        (result, status) => {
+          if (status === google.maps.DirectionsStatus.OK && result) {
+            const distanceInMeters = result.routes[0].legs[0].distance?.value || 0;
             setDistance((distanceInMeters / 1000).toFixed(1));
           }
         }
@@ -74,13 +92,19 @@ export default function ProjectSettings() {
 
   if (!currentUser) return null;
 
-  const project = projects.find(p => p.id === id);
   if (!project) return <div className="p-8 text-center">ไม่พบข้อมูลโครงการ</div>;
 
   const isManager = project.managerId === currentUser.id;
   const isMember = projectMembers.some(pm => pm.projectId === project.id && pm.userId === currentUser.id);
 
-  if (!isManager && !isMember) return <div className="p-8 text-center">คุณไม่มีสิทธิ์เข้าถึงโครงการนี้</div>;
+  useEffect(() => {
+    if (project && !isManager && !isMember) {
+      toast.error('คุณไม่มีสิทธิ์เข้าถึงโครงการนี้');
+      navigate('/my-projects');
+    }
+  }, [project, isManager, isMember, navigate]);
+
+  if (!isManager && !isMember) return null;
 
   const members = projectMembers.filter(pm => pm.projectId === project.id);
   const routes = projectRoutes.filter(pr => pr.projectId === project.id);
@@ -95,6 +119,21 @@ export default function ProjectSettings() {
   const handleAddSpecificMember = (userId: string) => {
     addProjectMember(project.id, userId);
     toast.success('เพิ่มสมาชิกแล้ว');
+  };
+
+  const handleSaveConfig = () => {
+    if (!project) return;
+    if (!configName || !configCode || !configManagerId) {
+      toast.error('กรุณากรอกข้อมูลให้ครบถ้วน');
+      return;
+    }
+    updateProject(project.id, {
+      name: configName,
+      code: configCode,
+      isPublic: configIsPublic,
+      managerId: configManagerId,
+    });
+    toast.success('บันทึกการตั้งค่าแล้ว');
   };
 
   const handleAddMember = () => {
@@ -202,13 +241,28 @@ export default function ProjectSettings() {
     }
   };
 
+  // Dashboard Data Calculation
+  const projectItems = items.filter(item => {
+    if (item.projectCodeId !== project.id) return false;
+    
+    const itemDate = new Date(item.date);
+    const itemPeriod = format(itemDate, 'yyyy-MM');
+    if (globalFilterPeriod !== 'all' && itemPeriod !== globalFilterPeriod) return false;
+    
+    if (globalFilterUser !== 'all' && item.userId !== globalFilterUser) return false;
+    
+    return true;
+  });
+
+  const totalAmount = projectItems.reduce((sum, item) => sum + item.amount, 0);
+  const draftAmount = projectItems.filter(i => i.status === 'draft').reduce((sum, item) => sum + item.amount, 0);
+  const pendingAmount = projectItems.filter(i => ['manager_pending', 'ceo_pending', 'accounting_pending'].includes(i.status)).reduce((sum, item) => sum + item.amount, 0);
+  const approvedAmount = projectItems.filter(i => i.status === 'approved').reduce((sum, item) => sum + item.amount, 0);
+
   return (
-    <div className="max-w-3xl mx-auto space-y-6">
+    <div className="max-w-4xl mx-auto space-y-6">
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div className="flex items-center gap-4 w-full sm:w-auto">
-          <Button variant="ghost" size="icon" onClick={() => navigate(-1)}>
-            <ArrowLeft className="h-5 w-5" />
-          </Button>
           <div className="flex-1 sm:w-64">
             <ProjectCombobox 
               projects={projects} 
@@ -259,23 +313,86 @@ export default function ProjectSettings() {
       <Card>
         <CardHeader>
           <CardTitle>{project.code} - {project.name}</CardTitle>
-          <CardDescription>จัดการสมาชิกและเส้นทางประจำของโครงการ</CardDescription>
+          <CardDescription>จัดการข้อมูล สมาชิก และเส้นทางประจำของโครงการ</CardDescription>
         </CardHeader>
         <CardContent>
           <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-            <TabsList className="grid w-full grid-cols-2">
-              <TabsTrigger value="team"><Users className="mr-2 h-4 w-4" /> สมาชิก ({members.length})</TabsTrigger>
-              <TabsTrigger value="routes"><Map className="mr-2 h-4 w-4" /> เส้นทางประจำ ({routes.length})</TabsTrigger>
+            <TabsList className="grid w-full grid-cols-5">
+              <TabsTrigger value="dashboard"><LayoutDashboard className="mr-2 h-4 w-4 hidden sm:block" /> Dashboard</TabsTrigger>
+              <TabsTrigger value="details"><FileText className="mr-2 h-4 w-4 hidden sm:block" /> Details</TabsTrigger>
+              <TabsTrigger value="team"><Users className="mr-2 h-4 w-4 hidden sm:block" /> Members</TabsTrigger>
+              <TabsTrigger value="routes"><Map className="mr-2 h-4 w-4 hidden sm:block" /> Routes</TabsTrigger>
+              <TabsTrigger value="config"><Settings className="mr-2 h-4 w-4 hidden sm:block" /> Config</TabsTrigger>
             </TabsList>
             
+            <TabsContent value="dashboard" className="mt-6 space-y-6">
+              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+                <Card>
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium">ยอดรวมทั้งหมด</CardTitle>
+                    <DollarSign className="h-4 w-4 text-muted-foreground" />
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-bold">฿{totalAmount.toLocaleString()}</div>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium">รอส่งเบิก (Draft)</CardTitle>
+                    <FileText className="h-4 w-4 text-muted-foreground" />
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-bold text-gray-600">฿{draftAmount.toLocaleString()}</div>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium">รออนุมัติ</CardTitle>
+                    <CheckSquare className="h-4 w-4 text-muted-foreground" />
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-bold text-yellow-600">฿{pendingAmount.toLocaleString()}</div>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium">อนุมัติแล้ว</CardTitle>
+                    <Check className="h-4 w-4 text-muted-foreground" />
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-bold text-green-600">฿{approvedAmount.toLocaleString()}</div>
+                  </CardContent>
+                </Card>
+              </div>
+            </TabsContent>
+
+            <TabsContent value="details" className="mt-6 space-y-6">
+              <div className="space-y-4">
+                <div>
+                  <Label className="text-muted-foreground">รหัสโครงการ</Label>
+                  <p className="text-lg font-medium">{project.code}</p>
+                </div>
+                <div>
+                  <Label className="text-muted-foreground">ชื่อโครงการ</Label>
+                  <p className="text-lg font-medium">{project.name}</p>
+                </div>
+                <div>
+                  <Label className="text-muted-foreground">ผู้จัดการโครงการ</Label>
+                  <p className="text-lg font-medium">{users.find(u => u.id === project.managerId)?.name || 'ไม่ระบุ'}</p>
+                </div>
+                <div>
+                  <Label className="text-muted-foreground">สถานะ</Label>
+                  <p className="text-lg font-medium">{project.isPublic ? 'Public (ทุกคนเข้าร่วมได้)' : 'Private (เฉพาะสมาชิกที่ได้รับเชิญ)'}</p>
+                </div>
+              </div>
+            </TabsContent>
+
             <TabsContent value="team" className="mt-6 space-y-6">
               {isManager && (
                 <div className="flex justify-end">
                   <Dialog open={addMemberDialogOpen} onOpenChange={setAddMemberDialogOpen}>
-                    <DialogTrigger asChild>
-                      <Button>
-                        <UserPlus className="mr-2 h-4 w-4" /> เพิ่มสมาชิกใหม่
-                      </Button>
+                    <DialogTrigger render={<Button />}>
+                      <UserPlus className="mr-2 h-4 w-4" /> เพิ่มสมาชิกใหม่
                     </DialogTrigger>
                     <DialogContent className="sm:max-w-[425px]">
                       <DialogHeader>
@@ -466,6 +583,51 @@ export default function ProjectSettings() {
                   </tbody>
                 </table>
               </div>
+            </TabsContent>
+
+            <TabsContent value="config" className="mt-6 space-y-6">
+              {isManager ? (
+                <div className="space-y-4 max-w-xl">
+                  <div className="space-y-2">
+                    <Label>รหัสโครงการ</Label>
+                    <Input value={configCode} onChange={e => setConfigCode(e.target.value)} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>ชื่อโครงการ</Label>
+                    <Input value={configName} onChange={e => setConfigName(e.target.value)} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>ผู้จัดการโครงการ</Label>
+                    <Select value={configManagerId} onValueChange={setConfigManagerId}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="เลือกผู้จัดการ" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {users.map(u => (
+                          <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>สถานะการเข้าถึง</Label>
+                    <Select value={configIsPublic ? 'public' : 'private'} onValueChange={v => setConfigIsPublic(v === 'public')}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="เลือกสถานะ" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="public">Public (ทุกคนเข้าร่วมได้)</SelectItem>
+                        <SelectItem value="private">Private (เฉพาะสมาชิกที่ได้รับเชิญ)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <Button onClick={handleSaveConfig} className="mt-4">บันทึกการตั้งค่า</Button>
+                </div>
+              ) : (
+                <div className="text-center p-8 text-muted-foreground border rounded-lg bg-gray-50">
+                  เฉพาะผู้จัดการโครงการเท่านั้นที่สามารถแก้ไขการตั้งค่าได้
+                </div>
+              )}
             </TabsContent>
           </Tabs>
         </CardContent>

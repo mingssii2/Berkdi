@@ -10,7 +10,7 @@ import { FileText, Download, Eye } from 'lucide-react';
 import { toast } from 'sonner';
 
 export default function AccountingDashboard() {
-  const { currentUser, claims, users, items, projects, markReadyToPay, markPaid, globalFilterProject, globalFilterPeriod } = useStore();
+  const { currentUser, claims, users, items, projects, markReadyToPay, markPaid, globalFilterProject, globalFilterPeriod, globalFilterUser } = useStore();
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('approved');
   const [selectedClaims, setSelectedClaims] = useState<string[]>([]);
@@ -40,6 +40,8 @@ export default function AccountingDashboard() {
     if (c.filteredItems.length === 0) return false;
     // Filter by period
     if (globalFilterPeriod !== 'all' && c.periodMonth !== globalFilterPeriod) return false;
+    // Filter by user
+    if (globalFilterUser !== 'all' && c.userId !== globalFilterUser) return false;
     return true;
   });
 

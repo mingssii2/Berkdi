@@ -205,23 +205,23 @@ export default function AdminDashboard() {
             </CardHeader>
             <CardContent className="space-y-4 max-w-md">
               <div className="space-y-2">
-                <Label>km_rate (฿/km)</Label>
+                <Label>อัตราค่าเดินทาง (บาท/กม.)</Label>
                 <Input type="number" defaultValue={7} />
               </div>
               <div className="space-y-2">
-                <Label>period_cutoff_day</Label>
+                <Label>วันตัดรอบบิล (วันที่)</Label>
                 <Input type="number" defaultValue={25} />
               </div>
               <div className="space-y-2">
-                <Label>ceo_approval_limit (฿)</Label>
+                <Label>วงเงินที่ต้องให้ CEO อนุมัติ (บาท)</Label>
                 <Input type="number" defaultValue={30000} />
               </div>
               <div className="space-y-2">
-                <Label>special_claim_max_months_back</Label>
+                <Label>ระยะเวลาย้อนหลังสูงสุดสำหรับกรณีพิเศษ (เดือน)</Label>
                 <Input type="number" defaultValue={3} />
               </div>
               <div className="space-y-2">
-                <Label>GOOGLE_OFFICE_ADDRESS</Label>
+                <Label>ที่อยู่สำนักงานใหญ่</Label>
                 <Input defaultValue="Promes Co., Ltd. Bangkok" />
               </div>
               <Button className="mt-4">Save Configuration</Button>

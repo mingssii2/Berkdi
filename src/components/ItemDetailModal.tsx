@@ -19,6 +19,8 @@ import {
 } from "../components/ui/alert-dialog";
 import { useNavigate } from 'react-router-dom';
 
+import { formatLocationName } from '../lib/utils';
+
 interface ItemDetailModalProps {
   item: ExpenseItem | null;
   isOpen: boolean;
@@ -107,7 +109,7 @@ export default function ItemDetailModal({ item, isOpen, onClose, canEdit = false
                   <div className="w-full">
                     <p className="text-sm font-medium">รายละเอียด</p>
                     <p className="text-sm text-muted-foreground">
-                      {item.type === 'travel' ? `ค่าเดินทาง ${item.origin} -> ${item.destination}` : item.description}
+                      {item.type === 'travel' ? `ค่าเดินทาง ${formatLocationName(item.origin)} -> ${formatLocationName(item.destination)}` : item.description}
                     </p>
                   </div>
                 </div>
@@ -169,7 +171,7 @@ export default function ItemDetailModal({ item, isOpen, onClose, canEdit = false
                           </div>
                           <div className="flex justify-between border-b pb-1 border-slate-100">
                             <span className="text-slate-500">เส้นทาง:</span>
-                            <span className="font-medium text-[#1e5b99] text-right max-w-[70%] truncate">{item.origin} {'->'} {item.destination}</span>
+                            <span className="font-medium text-[#1e5b99] text-right max-w-[70%] truncate">{formatLocationName(item.origin)} {'->'} {formatLocationName(item.destination)}</span>
                           </div>
                           <div className="flex justify-between pb-1">
                             <span className="text-slate-500">ระยะทาง:</span>
@@ -285,11 +287,11 @@ export default function ItemDetailModal({ item, isOpen, onClose, canEdit = false
                 </div>
                 <div className="flex justify-between border-b pb-3 border-slate-100">
                   <span className="text-slate-500">ต้นทาง:</span>
-                  <span className="font-medium text-[#1e5b99] text-right max-w-[70%]">{item.origin}</span>
+                  <span className="font-medium text-[#1e5b99] text-right max-w-[70%]">{formatLocationName(item.origin)}</span>
                 </div>
                 <div className="flex justify-between border-b pb-3 border-slate-100">
                   <span className="text-slate-500">ปลายทาง:</span>
-                  <span className="font-medium text-[#1e5b99] text-right max-w-[70%]">{item.destination}</span>
+                  <span className="font-medium text-[#1e5b99] text-right max-w-[70%]">{formatLocationName(item.destination)}</span>
                 </div>
                 <div className="flex justify-between border-b pb-3 border-slate-100">
                   <span className="text-slate-500">ระยะทาง:</span>

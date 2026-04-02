@@ -23,6 +23,8 @@ import {
   AlertDialogTrigger,
 } from "../components/ui/alert-dialog";
 
+import { formatLocationName } from '../lib/utils';
+
 export default function ClaimsList() {
   const { currentUser, items, claims, projects, updateItemStatus, createClaim, globalFilterProject, globalFilterPeriod } = useStore();
   const navigate = useNavigate();
@@ -116,6 +118,9 @@ export default function ClaimsList() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold tracking-tight">รายการเบิกของฉัน</h1>
+        <Button onClick={() => navigate('/claims/calendar')} variant="outline" className="text-blue-600 border-blue-200 hover:bg-blue-50">
+          นำเข้าจาก Calendar
+        </Button>
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
@@ -184,7 +189,7 @@ export default function ClaimsList() {
                     </div>
                     <div className="cursor-pointer" onClick={() => openItemDetail(item)}>
                       <div className="flex items-center gap-2">
-                        <p className="font-medium">{item.type === 'travel' ? 'ค่าเดินทาง' : item.description}</p>
+                        <p className="font-medium">{item.type === 'travel' ? `ค่าเดินทาง ${formatLocationName(item.origin)} -> ${formatLocationName(item.destination)}` : item.description}</p>
                       </div>
                       <p className="text-sm text-muted-foreground">
                         {format(new Date(item.date), 'dd MMM yyyy')} · โครงการ {projectName}

@@ -17,7 +17,7 @@ export default function Login() {
     <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
-          <CardTitle className="text-2xl font-bold text-blue-600">ProExpense</CardTitle>
+          <CardTitle className="text-2xl font-bold text-blue-600">BerkDI</CardTitle>
           <CardDescription>Internal Expense Management</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">

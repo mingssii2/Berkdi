@@ -8,7 +8,7 @@ import { FileText, AlertCircle, CheckCircle2, XCircle } from 'lucide-react';
 import { toast } from 'sonner';
 
 export default function ApprovalsList() {
-  const { currentUser, claims, projects, users, items, globalFilterProject, globalFilterPeriod, approveClaim, ceoApproveClaim } = useStore();
+  const { currentUser, claims, projects, users, items, globalFilterProject, globalFilterPeriod, globalFilterUser, approveClaim, ceoApproveClaim } = useStore();
   const navigate = useNavigate();
 
   if (!currentUser) return null;
@@ -37,6 +37,8 @@ export default function ApprovalsList() {
     if (c.filteredItems.length === 0) return false;
     // Filter by period
     if (globalFilterPeriod !== 'all' && c.periodMonth !== globalFilterPeriod) return false;
+    // Filter by user
+    if (globalFilterUser !== 'all' && c.userId !== globalFilterUser) return false;
     return true;
   });
 

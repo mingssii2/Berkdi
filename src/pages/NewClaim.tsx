@@ -553,6 +553,18 @@ export default function NewClaim() {
                         <Search className="h-5 w-5" />
                       </Button>
                     </div>
+                    <div className="flex gap-2 mt-1">
+                      {currentUser?.homeAddress && (
+                        <Button variant="ghost" size="sm" className="h-6 text-xs text-slate-500 hover:text-blue-600" onClick={() => { setOrigin(currentUser.homeAddress!); setIsManualDistance(false); }}>
+                          <Home className="w-3 h-3 mr-1" /> บ้าน
+                        </Button>
+                      )}
+                      {currentUser?.officeAddress && (
+                        <Button variant="ghost" size="sm" className="h-6 text-xs text-slate-500 hover:text-blue-600" onClick={() => { setOrigin(currentUser.officeAddress!); setIsManualDistance(false); }}>
+                          <Building className="w-3 h-3 mr-1" /> ที่ทำงาน
+                        </Button>
+                      )}
+                    </div>
                   </div>
 
                   <div className="space-y-2">
@@ -581,6 +593,18 @@ export default function NewClaim() {
                       <Button variant="outline" className="h-12 w-12 shrink-0 rounded-xl" onClick={() => { setPickerType('destination'); setIsLocationPickerOpen(true); }}>
                         <Search className="h-5 w-5" />
                       </Button>
+                    </div>
+                    <div className="flex gap-2 mt-1">
+                      {currentUser?.homeAddress && (
+                        <Button variant="ghost" size="sm" className="h-6 text-xs text-slate-500 hover:text-blue-600" onClick={() => { setDestination(currentUser.homeAddress!); setIsManualDistance(false); }}>
+                          <Home className="w-3 h-3 mr-1" /> บ้าน
+                        </Button>
+                      )}
+                      {currentUser?.officeAddress && (
+                        <Button variant="ghost" size="sm" className="h-6 text-xs text-slate-500 hover:text-blue-600" onClick={() => { setDestination(currentUser.officeAddress!); setIsManualDistance(false); }}>
+                          <Building className="w-3 h-3 mr-1" /> ที่ทำงาน
+                        </Button>
+                      )}
                     </div>
                   </div>
                 </div>

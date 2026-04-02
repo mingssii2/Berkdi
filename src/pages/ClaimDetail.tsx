@@ -10,6 +10,8 @@ import { FileText, Car, Camera, Send, ArrowLeft, Eye } from 'lucide-react';
 import { toast } from 'sonner';
 import ItemDetailModal from '../components/ItemDetailModal';
 
+import { formatLocationName } from '../lib/utils';
+
 export default function ClaimDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -85,7 +87,7 @@ export default function ClaimDetail() {
                   <div>
                     <div className="flex items-center gap-2">
                       <p className="font-medium">
-                        {index + 1}. {item.type === 'travel' ? 'ค่าเดินทาง' : item.description}
+                        {index + 1}. {item.type === 'travel' ? `ค่าเดินทาง ${formatLocationName(item.origin)} -> ${formatLocationName(item.destination)}` : item.description}
                       </p>
                       {item.status === 'approved' && <Badge className="bg-green-500">อนุมัติ</Badge>}
                       {item.status === 'rejected' && <Badge variant="destructive">ไม่อนุมัติ</Badge>}
@@ -95,7 +97,7 @@ export default function ClaimDetail() {
                     </p>
                     {item.type === 'travel' && (
                       <p className="text-xs text-gray-500 mt-1">
-                        {item.origin} → {item.destination} ({item.distance} km)
+                        {formatLocationName(item.origin)} → {formatLocationName(item.destination)} ({item.distance} km)
                       </p>
                     )}
                   </div>

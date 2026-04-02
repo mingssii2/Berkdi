@@ -5,8 +5,10 @@ import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card'
 import { Car, Camera, Clock, CheckCircle2, AlertCircle, Edit } from 'lucide-react';
 import { format } from 'date-fns';
 
+import { formatLocationName } from '../lib/utils';
+
 export default function Dashboard() {
-  const { currentUser, items, claims, projects, globalFilterProject, globalFilterPeriod } = useStore();
+  const { currentUser, items, claims, projects, globalFilterProject, globalFilterPeriod, globalFilterUser } = useStore();
   const navigate = useNavigate();
 
   if (!currentUser) return null;
@@ -20,6 +22,7 @@ export default function Dashboard() {
       const itemPeriod = format(new Date(i.date), 'yyyy-MM');
       if (itemPeriod !== globalFilterPeriod) return false;
     }
+    if (globalFilterUser !== 'all' && i.userId !== globalFilterUser) return false;
     return true;
   });
 
@@ -44,6 +47,8 @@ export default function Dashboard() {
     if (c.filteredItems.length === 0) return false;
     // Filter by period
     if (globalFilterPeriod !== 'all' && c.periodMonth !== globalFilterPeriod) return false;
+    // Filter by user
+    if (globalFilterUser !== 'all' && c.userId !== globalFilterUser) return false;
     return true;
   });
 
@@ -177,7 +182,7 @@ export default function Dashboard() {
                           {item.type === 'travel' ? <Car className="h-5 w-5" /> : <Camera className="h-5 w-5" />}
                         </div>
                         <div>
-                          <p className="font-medium">{item.type === 'travel' ? 'ค่าเดินทาง' : item.description}</p>
+                          <p className="font-medium">{item.type === 'travel' ? `ค่าเดินทาง ${formatLocationName(item.origin)} -> ${formatLocationName(item.destination)}` : item.description}</p>
                           <p className="text-sm text-muted-foreground">
                             {format(new Date(item.date), 'dd MMM yyyy')} · {projects.find(p => p.id === item.projectCodeId)?.name || item.projectCodeId}
                           </p>
