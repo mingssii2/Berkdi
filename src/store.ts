@@ -45,8 +45,6 @@ export interface ProjectRoute {
   origin: string;
   destination: string;
   distance: number;
-  originLatLng?: { lat: number, lng: number };
-  destLatLng?: { lat: number, lng: number };
 }
 
 export interface ExpenseItem {
@@ -165,8 +163,8 @@ export const useStore = create<AppState>((set, get) => ({
     { id: 'pm2', projectId: 'p3', userId: 'u2' },
   ],
   projectRoutes: [
-    { id: 'pr1', projectId: 'p3', origin: 'บ้าน', destination: 'Promes', distance: 15.3, originLatLng: { lat: 13.7563, lng: 100.5018 }, destLatLng: { lat: 13.7463, lng: 100.5318 } },
-    { id: 'pr2', projectId: 'p3', origin: 'Promes', destination: 'ลูกค้า A', distance: 10.5, originLatLng: { lat: 13.7463, lng: 100.5318 }, destLatLng: { lat: 13.7363, lng: 100.5518 } },
+    { id: 'pr1', projectId: 'p3', origin: 'บ้าน', destination: 'Promes', distance: 15.3 },
+    { id: 'pr2', projectId: 'p3', origin: 'Promes', destination: 'ลูกค้า A', distance: 10.5 },
   ],
   items: [
     { id: 'i1', userId: 'u1', projectCodeId: 'p1', type: 'travel', amount: 214, date: '2026-03-15', status: 'draft', claimId: null, origin: 'บ้าน', destination: 'Promes', distance: 30.6, createdAt: new Date().toISOString(), receiptUrl: 'https://picsum.photos/seed/map1/600/400' },

@@ -9,7 +9,7 @@ import { Checkbox } from '../components/ui/checkbox';
 import { toast } from 'sonner';
 import { MapPin, Camera, UploadCloud, CheckCircle2, AlertTriangle, XCircle, Calendar as CalendarIcon, Home, Building, Route, Search, Navigation, ArrowRightLeft, ArrowRight, Plus, ChevronLeft, ChevronRight, Save, Trash2, X } from 'lucide-react';
 import { format, subDays } from 'date-fns';
-import { useJsApiLoader, GoogleMap, DirectionsService, Polyline, Marker, Autocomplete } from '@react-google-maps/api';
+import { useJsApiLoader, GoogleMap, DirectionsService, DirectionsRenderer, Autocomplete } from '@react-google-maps/api';
 import { RoutePickerModal } from '../components/RoutePickerModal';
 import { LocationPickerModal } from '../components/LocationPickerModal';
 import { ProjectCombobox } from '../components/ProjectCombobox';
@@ -33,8 +33,6 @@ type Draft = {
   dates: Date[];
   origin: string;
   destination: string;
-  originLatLng?: {lat: number, lng: number};
-  destLatLng?: {lat: number, lng: number};
   distance: number;
   isManualDistance: boolean;
   isRoundTrip: boolean;
@@ -144,14 +142,12 @@ export default function NewClaim() {
     if (!currentDraft.origin || !currentDraft.destination || !isLoaded) return;
 
     const directionsService = new google.maps.DirectionsService();
-    const request: google.maps.DirectionsRequest = {
-      origin: currentDraft.originLatLng || currentDraft.origin,
-      destination: currentDraft.destLatLng || currentDraft.destination,
-      travelMode: google.maps.TravelMode.DRIVING,
-    };
-
     directionsService.route(
-      request,
+      {
+        origin: currentDraft.origin,
+        destination: currentDraft.destination,
+        travelMode: google.maps.TravelMode.DRIVING,
+      },
       (result, status) => {
         if (status === google.maps.DirectionsStatus.OK && result) {
           setDirectionsResponse(result);
@@ -168,20 +164,18 @@ export default function NewClaim() {
         }
       }
     );
-  }, [currentDraft.origin, currentDraft.destination, currentDraft.originLatLng, currentDraft.destLatLng, isLoaded, currentDraft.isManualDistance, updateCurrentDraft]);
+  }, [currentDraft.origin, currentDraft.destination, isLoaded, currentDraft.isManualDistance, updateCurrentDraft]);
 
   const calculateReturnRoute = useCallback(() => {
     if (!currentDraft.origin || !currentDraft.destination || !isLoaded || !currentDraft.isRoundTrip) return;
 
     const directionsService = new google.maps.DirectionsService();
-    const request: google.maps.DirectionsRequest = {
-      origin: currentDraft.destLatLng || currentDraft.destination,
-      destination: currentDraft.originLatLng || currentDraft.origin,
-      travelMode: google.maps.TravelMode.DRIVING,
-    };
-
     directionsService.route(
-      request,
+      {
+        origin: currentDraft.destination,
+        destination: currentDraft.origin,
+        travelMode: google.maps.TravelMode.DRIVING,
+      },
       (result, status) => {
         if (status === google.maps.DirectionsStatus.OK && result) {
           setReturnDirectionsResponse(result);
@@ -198,7 +192,7 @@ export default function NewClaim() {
         }
       }
     );
-  }, [currentDraft.origin, currentDraft.destination, currentDraft.originLatLng, currentDraft.destLatLng, isLoaded, currentDraft.isReturnManualDistance, currentDraft.isRoundTrip, updateCurrentDraft]);
+  }, [currentDraft.origin, currentDraft.destination, isLoaded, currentDraft.isReturnManualDistance, currentDraft.isRoundTrip, updateCurrentDraft]);
 
   useEffect(() => {
     if (currentDraft.origin && currentDraft.destination) {
@@ -393,12 +387,10 @@ export default function NewClaim() {
   // Route Picker State
   const [isRoutePickerOpen, setIsRoutePickerOpen] = useState(false);
 
-  const handleRouteConfirm = (route: { origin: string; destination: string; distance: number; originLatLng?: {lat: number, lng: number}; destLatLng?: {lat: number, lng: number} }) => {
+  const handleRouteConfirm = (route: { origin: string; destination: string; distance: number }) => {
     updateCurrentDraft({
       origin: route.origin,
       destination: route.destination,
-      originLatLng: route.originLatLng,
-      destLatLng: route.destLatLng,
       distance: Math.round(route.distance),
       isManualDistance: true
     });
@@ -407,8 +399,8 @@ export default function NewClaim() {
       const directionsService = new google.maps.DirectionsService();
       directionsService.route(
         {
-          origin: route.originLatLng || route.origin,
-          destination: route.destLatLng || route.destination,
+          origin: route.origin,
+          destination: route.destination,
           travelMode: google.maps.TravelMode.DRIVING,
         },
         (result, status) => {
@@ -547,10 +539,8 @@ export default function NewClaim() {
                           updateCurrentDraft({
                             origin: route.origin,
                             destination: route.destination,
-                            originLatLng: route.originLatLng,
-                            destLatLng: route.destLatLng,
                             distance: route.distance,
-                            isManualDistance: true
+                            isManualDistance: false
                           });
                         }}
                       >
@@ -692,14 +682,7 @@ export default function NewClaim() {
                     mapContainerStyle={{ width: '100%', height: '100%' }}
                     options={{ disableDefaultUI: true, gestureHandling: 'none' }}
                   >
-                    <>
-                      <Polyline 
-                        path={directionsResponse.routes[0].overview_path} 
-                        options={{ strokeColor: '#3b82f6', strokeWeight: 5 }} 
-                      />
-                      <Marker position={directionsResponse.routes[0].legs[0].start_location} />
-                      <Marker position={directionsResponse.routes[0].legs[0].end_location} />
-                    </>
+                    <DirectionsRenderer directions={directionsResponse} options={{ suppressMarkers: false }} />
                   </GoogleMap>
                   <div className="absolute bottom-3 right-3 bg-white/90 backdrop-blur-sm px-3 py-1.5 rounded-lg shadow-sm border border-slate-100 text-xs font-medium text-slate-600">
                     แผนที่สรุปเส้นทางขาไป
@@ -713,14 +696,7 @@ export default function NewClaim() {
                     mapContainerStyle={{ width: '100%', height: '100%' }}
                     options={{ disableDefaultUI: true, gestureHandling: 'none' }}
                   >
-                    <>
-                      <Polyline 
-                        path={returnDirectionsResponse.routes[0].overview_path} 
-                        options={{ strokeColor: '#10b981', strokeWeight: 5 }} 
-                      />
-                      <Marker position={returnDirectionsResponse.routes[0].legs[0].start_location} />
-                      <Marker position={returnDirectionsResponse.routes[0].legs[0].end_location} />
-                    </>
+                    <DirectionsRenderer directions={returnDirectionsResponse} options={{ suppressMarkers: false, polylineOptions: { strokeColor: '#10b981' } }} />
                   </GoogleMap>
                   <div className="absolute bottom-3 right-3 bg-white/90 backdrop-blur-sm px-3 py-1.5 rounded-lg shadow-sm border border-slate-100 text-xs font-medium text-slate-600">
                     แผนที่สรุปเส้นทางขากลับ

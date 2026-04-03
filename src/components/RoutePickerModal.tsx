@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
-import { useJsApiLoader, GoogleMap, Autocomplete, Polyline, Marker } from '@react-google-maps/api';
+import { useJsApiLoader, GoogleMap, Autocomplete, DirectionsRenderer } from '@react-google-maps/api';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from './ui/dialog';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
@@ -11,7 +11,7 @@ const defaultCenter = { lat: 13.7563, lng: 100.5018 }; // Bangkok
 interface RoutePickerModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onConfirm: (route: { origin: string; destination: string; distance: number; originLatLng?: {lat: number, lng: number}; destLatLng?: {lat: number, lng: number} }) => void;
+  onConfirm: (route: { origin: string; destination: string; distance: number }) => void;
   initialOrigin?: string;
   initialDestination?: string;
 }
@@ -77,7 +77,7 @@ export function RoutePickerModal({ isOpen, onClose, onConfirm, initialOrigin, in
       if (place.geometry && place.geometry.location) {
         const lat = place.geometry.location.lat();
         const lng = place.geometry.location.lng();
-        const address = place.name || place.formatted_address || '';
+        const address = place.formatted_address || place.name || '';
         
         isProgrammaticPan.current = true;
         map?.panTo({ lat, lng });
@@ -110,15 +110,7 @@ export function RoutePickerModal({ isOpen, onClose, onConfirm, initialOrigin, in
     const geocoder = new google.maps.Geocoder();
     geocoder.geocode({ location: { lat, lng } }, (results, status) => {
       if (status === 'OK' && results && results[0]) {
-        // Try to get a shorter name
-        let address = results[0].formatted_address;
-        const poi = results.find(r => r.types.includes('point_of_interest') || r.types.includes('establishment'));
-        if (poi && poi.address_components && poi.address_components.length > 0) {
-          address = poi.address_components[0].short_name;
-        } else {
-          address = results[0].formatted_address.split(',')[0];
-        }
-        
+        const address = results[0].formatted_address;
         if (step === 'origin') {
           setOrigin(address);
           setOriginLatLng({ lat, lng });
@@ -158,13 +150,7 @@ export function RoutePickerModal({ isOpen, onClose, onConfirm, initialOrigin, in
     } else if (step === 'destination') {
       calculateRoute();
     } else if (step === 'preview') {
-      onConfirm({ 
-        origin, 
-        destination, 
-        distance,
-        originLatLng: originLatLng || undefined,
-        destLatLng: destLatLng || undefined
-      });
+      onConfirm({ origin, destination, distance });
       onClose();
     }
   };
@@ -224,14 +210,13 @@ export function RoutePickerModal({ isOpen, onClose, onConfirm, initialOrigin, in
             }}
           >
             {step === 'preview' && directions && (
-              <>
-                <Polyline 
-                  path={directions.routes[0].overview_path} 
-                  options={{ strokeColor: '#3b82f6', strokeWeight: 5 }} 
-                />
-                <Marker position={directions.routes[0].legs[0].start_location} />
-                <Marker position={directions.routes[0].legs[0].end_location} />
-              </>
+              <DirectionsRenderer 
+                directions={directions} 
+                options={{
+                  polylineOptions: { strokeColor: '#3b82f6', strokeWeight: 5 },
+                  suppressMarkers: false
+                }}
+              />
             )}
           </GoogleMap>
 
