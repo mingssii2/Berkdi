@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
-import { useJsApiLoader, GoogleMap, Autocomplete, DirectionsRenderer } from '@react-google-maps/api';
+import { useJsApiLoader, GoogleMap, Autocomplete, Polyline, Marker } from '@react-google-maps/api';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from './ui/dialog';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
@@ -11,7 +11,7 @@ const defaultCenter = { lat: 13.7563, lng: 100.5018 }; // Bangkok
 interface RoutePickerModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onConfirm: (route: { origin: string; destination: string; distance: number }) => void;
+  onConfirm: (route: { origin: string; destination: string; distance: number; originLatLng?: {lat: number, lng: number}; destLatLng?: {lat: number, lng: number} }) => void;
   initialOrigin?: string;
   initialDestination?: string;
 }
@@ -158,7 +158,13 @@ export function RoutePickerModal({ isOpen, onClose, onConfirm, initialOrigin, in
     } else if (step === 'destination') {
       calculateRoute();
     } else if (step === 'preview') {
-      onConfirm({ origin, destination, distance });
+      onConfirm({ 
+        origin, 
+        destination, 
+        distance,
+        originLatLng: originLatLng || undefined,
+        destLatLng: destLatLng || undefined
+      });
       onClose();
     }
   };
@@ -218,13 +224,14 @@ export function RoutePickerModal({ isOpen, onClose, onConfirm, initialOrigin, in
             }}
           >
             {step === 'preview' && directions && (
-              <DirectionsRenderer 
-                directions={directions} 
-                options={{
-                  polylineOptions: { strokeColor: '#3b82f6', strokeWeight: 5 },
-                  suppressMarkers: false
-                }}
-              />
+              <>
+                <Polyline 
+                  path={directions.routes[0].overview_path} 
+                  options={{ strokeColor: '#3b82f6', strokeWeight: 5 }} 
+                />
+                <Marker position={directions.routes[0].legs[0].start_location} />
+                <Marker position={directions.routes[0].legs[0].end_location} />
+              </>
             )}
           </GoogleMap>
 

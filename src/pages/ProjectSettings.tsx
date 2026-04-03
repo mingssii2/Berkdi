@@ -152,7 +152,9 @@ export default function ProjectSettings() {
       projectId: project.id,
       origin,
       destination,
-      distance: parseFloat(distance)
+      distance: parseFloat(distance),
+      originLatLng: originLatLng || undefined,
+      destLatLng: destLatLng || undefined
     });
     setOrigin('');
     setDestination('');
@@ -163,10 +165,12 @@ export default function ProjectSettings() {
     toast.success('เพิ่มเส้นทางแล้ว');
   };
 
-  const handleRouteConfirm = (route: { origin: string; destination: string; distance: number }) => {
+  const handleRouteConfirm = (route: { origin: string; destination: string; distance: number; originLatLng?: {lat: number, lng: number}; destLatLng?: {lat: number, lng: number} }) => {
     setOrigin(route.origin);
     setDestination(route.destination);
     setDistance(route.distance.toFixed(1));
+    if (route.originLatLng) setOriginLatLng(route.originLatLng);
+    if (route.destLatLng) setDestLatLng(route.destLatLng);
     setIsAddingRoute(true);
   };
 
