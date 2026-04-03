@@ -77,7 +77,7 @@ export function RoutePickerModal({ isOpen, onClose, onConfirm, initialOrigin, in
       if (place.geometry && place.geometry.location) {
         const lat = place.geometry.location.lat();
         const lng = place.geometry.location.lng();
-        const address = place.formatted_address || place.name || '';
+        const address = place.name || place.formatted_address || '';
         
         isProgrammaticPan.current = true;
         map?.panTo({ lat, lng });
@@ -110,7 +110,15 @@ export function RoutePickerModal({ isOpen, onClose, onConfirm, initialOrigin, in
     const geocoder = new google.maps.Geocoder();
     geocoder.geocode({ location: { lat, lng } }, (results, status) => {
       if (status === 'OK' && results && results[0]) {
-        const address = results[0].formatted_address;
+        // Try to get a shorter name
+        let address = results[0].formatted_address;
+        const poi = results.find(r => r.types.includes('point_of_interest') || r.types.includes('establishment'));
+        if (poi && poi.address_components && poi.address_components.length > 0) {
+          address = poi.address_components[0].short_name;
+        } else {
+          address = results[0].formatted_address.split(',')[0];
+        }
+        
         if (step === 'origin') {
           setOrigin(address);
           setOriginLatLng({ lat, lng });

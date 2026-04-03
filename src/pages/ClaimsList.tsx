@@ -118,9 +118,14 @@ export default function ClaimsList() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold tracking-tight">รายการเบิกของฉัน</h1>
-        <Button onClick={() => navigate('/claims/calendar')} variant="outline" className="text-blue-600 border-blue-200 hover:bg-blue-50">
-          นำเข้าจาก Calendar
-        </Button>
+        <div className="flex gap-2">
+          <Button onClick={() => navigate('/claims/new?type=travel')} variant="outline" size="sm" className="text-blue-600 border-blue-200 hover:bg-blue-50">
+            <Car className="w-4 h-4 mr-1" /> ค่าเดินทาง
+          </Button>
+          <Button onClick={() => navigate('/claims/new?type=misc')} variant="outline" size="sm" className="text-green-600 border-green-200 hover:bg-green-50">
+            <Camera className="w-4 h-4 mr-1" /> ใบเสร็จ
+          </Button>
+        </div>
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">

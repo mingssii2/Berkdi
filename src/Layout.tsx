@@ -66,7 +66,7 @@ export default function Layout() {
   return (
     <div className="min-h-screen bg-gray-50 flex">
       {/* Desktop Sidebar */}
-      <aside className="hidden sm:flex flex-col w-64 bg-white border-r fixed h-full z-20">
+      <aside className="hidden sm:flex flex-col w-64 bg-white border-r fixed h-full z-50">
         <div className="h-16 flex items-center px-6 border-b">
           <Link to="/" className="text-xl font-bold text-blue-600">BerkDI</Link>
         </div>
@@ -97,7 +97,7 @@ export default function Layout() {
       {/* Main Content Wrapper */}
       <div className="flex-1 flex flex-col sm:ml-64 min-h-screen min-w-0">
         {/* Header (Mobile & Desktop) */}
-        <header className="bg-white border-b sticky top-0 z-10 h-16 flex items-center justify-between px-4 sm:px-6">
+        <header className="bg-white border-b sticky top-0 z-40 h-16 flex items-center justify-between px-4 sm:px-6">
           <div className="flex items-center gap-2">
             <Button variant="ghost" size="icon" onClick={() => navigate(-1)} className="mr-1">
               <ChevronLeft className="h-5 w-5" />

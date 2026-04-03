@@ -2,7 +2,8 @@ import { useNavigate } from 'react-router-dom';
 import { useStore } from '../store';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../components/ui/card';
 import { Badge } from '../components/ui/badge';
-import { FolderKanban, Users, Map } from 'lucide-react';
+import { Button } from '../components/ui/button';
+import { FolderKanban, Users, Map, Car, Camera } from 'lucide-react';
 
 export default function MyProjects() {
   const { currentUser, projects, projectMembers, projectRoutes } = useStore();
@@ -33,17 +34,43 @@ export default function MyProjects() {
             return (
               <Card 
                 key={project.id} 
-                className="cursor-pointer hover:bg-gray-50 transition-colors"
+                className="cursor-pointer hover:bg-gray-50 transition-colors relative"
                 onClick={() => navigate(`/my-projects/${project.id}`)}
               >
                 <CardHeader className="pb-2">
                   <div className="flex items-center justify-between">
                     <CardTitle className="text-lg">{project.code}</CardTitle>
+                    <div className="flex items-center gap-2">
+                      <Button 
+                        variant="ghost" 
+                        size="icon" 
+                        className="h-8 w-8 text-blue-600 hover:bg-blue-100"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          navigate(`/claims/new?type=travel&project=${project.id}`);
+                        }}
+                      >
+                        <Car className="h-4 w-4" />
+                      </Button>
+                      <Button 
+                        variant="ghost" 
+                        size="icon" 
+                        className="h-8 w-8 text-green-600 hover:bg-green-100"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          navigate(`/claims/new?type=misc&project=${project.id}`);
+                        }}
+                      >
+                        <Camera className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between mt-1">
+                    <CardDescription>{project.name}</CardDescription>
                     <Badge variant={project.isPublic ? 'default' : 'secondary'}>
                       {project.isPublic ? 'Public' : 'Private'}
                     </Badge>
                   </div>
-                  <CardDescription>{project.name}</CardDescription>
                 </CardHeader>
                 <CardContent>
                   <div className="flex items-center gap-4 text-sm text-muted-foreground mt-4">

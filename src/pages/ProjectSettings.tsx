@@ -11,6 +11,7 @@ import { Badge } from '../components/ui/badge';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '../components/ui/alert-dialog';
 import { ArrowLeft, Users, Map, Trash2, Plus, Search, Check, UserPlus, LayoutDashboard, FileText, Settings, DollarSign, CheckSquare } from 'lucide-react';
 import { toast } from 'sonner';
+import { RoutePickerModal } from '../components/RoutePickerModal';
 import { LocationPickerModal } from '../components/LocationPickerModal';
 import { ProjectCombobox } from '../components/ProjectCombobox';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger } from '../components/ui/dialog';
@@ -51,6 +52,8 @@ export default function ProjectSettings() {
   // Location Picker State
   const [pickerOpen, setPickerOpen] = useState(false);
   const [pickerTarget, setPickerTarget] = useState<'origin' | 'destination' | null>(null);
+  const [routePickerOpen, setRoutePickerOpen] = useState(false);
+  const [isAddingRoute, setIsAddingRoute] = useState(false);
   const [originLatLng, setOriginLatLng] = useState<{lat: number, lng: number} | null>(null);
   const [destLatLng, setDestLatLng] = useState<{lat: number, lng: number} | null>(null);
 
@@ -156,7 +159,15 @@ export default function ProjectSettings() {
     setDistance('');
     setOriginLatLng(null);
     setDestLatLng(null);
+    setIsAddingRoute(false);
     toast.success('เพิ่มเส้นทางแล้ว');
+  };
+
+  const handleRouteConfirm = (route: { origin: string; destination: string; distance: number }) => {
+    setOrigin(route.origin);
+    setDestination(route.destination);
+    setDistance(route.distance.toFixed(1));
+    setIsAddingRoute(true);
   };
 
   const handleDeleteMember = () => {
@@ -485,66 +496,50 @@ export default function ProjectSettings() {
             </TabsContent>
 
             <TabsContent value="routes" className="mt-6 space-y-6">
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 items-end">
-                <div className="space-y-2">
-                  <Label>ต้นทาง</Label>
-                  <div className="flex gap-2">
-                    {isLoaded ? (
-                      <Autocomplete
-                        onLoad={onOriginLoad}
-                        onPlaceChanged={onOriginPlaceChanged}
-                        className="flex-1"
-                      >
-                        <Input 
-                          value={origin} 
-                          onChange={(e) => setOrigin(e.target.value)} 
-                          placeholder="เช่น บ้าน" 
-                          className="w-full"
-                        />
-                      </Autocomplete>
-                    ) : (
-                      <Input value={origin} onChange={(e) => setOrigin(e.target.value)} placeholder="กำลังโหลด..." disabled />
-                    )}
-                    <Button variant="outline" size="icon" onClick={() => openPicker('origin')}>
-                      <Search className="w-4 h-4" />
-                    </Button>
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <Label>ปลายทาง</Label>
-                  <div className="flex gap-2">
-                    {isLoaded ? (
-                      <Autocomplete
-                        onLoad={onDestLoad}
-                        onPlaceChanged={onDestPlaceChanged}
-                        className="flex-1"
-                      >
-                        <Input 
-                          value={destination} 
-                          onChange={(e) => setDestination(e.target.value)} 
-                          placeholder="เช่น ออฟฟิศ" 
-                          className="w-full"
-                        />
-                      </Autocomplete>
-                    ) : (
-                      <Input value={destination} onChange={(e) => setDestination(e.target.value)} placeholder="กำลังโหลด..." disabled />
-                    )}
-                    <Button variant="outline" size="icon" onClick={() => openPicker('destination')}>
-                      <Search className="w-4 h-4" />
-                    </Button>
-                  </div>
-                </div>
-                <div className="space-y-2 flex gap-2 items-end">
-                  <div className="flex-1">
-                    <Label>ระยะทาง (km)</Label>
-                    <Input type="number" value={distance} onChange={(e) => setDistance(e.target.value)} placeholder="0" disabled />
-                    <p className="text-xs text-muted-foreground">คำนวณอัตโนมัติ</p>
-                  </div>
-                  <Button onClick={handleAddRoute} disabled={!origin || !destination || !distance} className="mb-5">
-                    <Plus className="h-4 w-4" />
+              {!isAddingRoute ? (
+                <div className="flex justify-between items-center">
+                  <p className="text-sm text-muted-foreground">เส้นทางประจำของโครงการนี้</p>
+                  <Button onClick={() => setRoutePickerOpen(true)} className="bg-blue-600 hover:bg-blue-700">
+                    <Map className="w-4 h-4 mr-2" /> เพิ่มเส้นทางประจำ
                   </Button>
                 </div>
-              </div>
+              ) : (
+                <div className="p-4 bg-blue-50 border border-blue-100 rounded-xl space-y-4">
+                  <div className="flex justify-between items-center">
+                    <h3 className="font-semibold text-blue-800">ยืนยัน/แก้ไข ชื่อสถานที่</h3>
+                    <Button variant="ghost" size="sm" onClick={() => setIsAddingRoute(false)}>ยกเลิก</Button>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 items-end">
+                    <div className="space-y-2">
+                      <Label>ชื่อต้นทาง</Label>
+                      <Input 
+                        value={origin} 
+                        onChange={(e) => setOrigin(e.target.value)} 
+                        placeholder="เช่น บ้าน" 
+                        className="w-full bg-white"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>ชื่อปลายทาง</Label>
+                      <Input 
+                        value={destination} 
+                        onChange={(e) => setDestination(e.target.value)} 
+                        placeholder="เช่น ออฟฟิศ" 
+                        className="w-full bg-white"
+                      />
+                    </div>
+                    <div className="space-y-2 flex gap-2 items-end">
+                      <div className="flex-1">
+                        <Label>ระยะทาง (km)</Label>
+                        <Input type="number" value={distance} onChange={(e) => setDistance(e.target.value)} placeholder="0" disabled className="bg-white" />
+                      </div>
+                      <Button onClick={handleAddRoute} disabled={!origin || !destination || !distance} className="mb-0 bg-blue-600 hover:bg-blue-700">
+                        <Save className="h-4 w-4 mr-2" /> บันทึก
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               <div className="border rounded-lg overflow-hidden">
                 <table className="w-full text-sm text-left">
@@ -639,6 +634,14 @@ export default function ProjectSettings() {
           onClose={() => setPickerOpen(false)}
           onConfirm={handleLocationConfirm}
           initialAddress={getInitialAddressForPicker()}
+        />
+      )}
+
+      {routePickerOpen && (
+        <RoutePickerModal
+          isOpen={routePickerOpen}
+          onClose={() => setRoutePickerOpen(false)}
+          onConfirm={handleRouteConfirm}
         />
       )}
     </div>

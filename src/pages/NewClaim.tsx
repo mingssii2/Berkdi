@@ -2,13 +2,13 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useStore, PresetRoute } from '../store';
 import { Button } from '../components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '../components/ui/card';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Checkbox } from '../components/ui/checkbox';
 import { toast } from 'sonner';
-import { MapPin, Camera, UploadCloud, CheckCircle2, AlertTriangle, XCircle, Calendar as CalendarIcon, Home, Building, Route, Search, Navigation, ArrowRightLeft } from 'lucide-react';
-import { format } from 'date-fns';
+import { MapPin, Camera, UploadCloud, CheckCircle2, AlertTriangle, XCircle, Calendar as CalendarIcon, Home, Building, Route, Search, Navigation, ArrowRightLeft, ArrowRight, Plus, ChevronLeft, ChevronRight, Save, Trash2, X } from 'lucide-react';
+import { format, subDays } from 'date-fns';
 import { useJsApiLoader, GoogleMap, DirectionsService, DirectionsRenderer, Autocomplete } from '@react-google-maps/api';
 import { RoutePickerModal } from '../components/RoutePickerModal';
 import { LocationPickerModal } from '../components/LocationPickerModal';
@@ -26,263 +26,359 @@ const mockCalendarEvents = [
   { id: 'cal3', title: 'Follow up', location: 'ตึก GMM Grammy', time: '10:00 - 11:30', projectCode: 'BKK', date: new Date(2026, 3, 2) },
 ];
 
+type Draft = {
+  id: string;
+  type: 'travel' | 'misc';
+  projectId: string;
+  dates: Date[];
+  origin: string;
+  destination: string;
+  distance: number;
+  isManualDistance: boolean;
+  isRoundTrip: boolean;
+  returnDistance: number;
+  isReturnManualDistance: boolean;
+  description: string;
+  amount: number;
+  receiptUrl: string;
+};
+
+const createEmptyDraft = (type: 'travel' | 'misc', projectId: string = ''): Draft => ({
+  id: `draft-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+  type,
+  projectId,
+  dates: [new Date()],
+  origin: '',
+  destination: '',
+  distance: 0,
+  isManualDistance: false,
+  isRoundTrip: false,
+  returnDistance: 0,
+  isReturnManualDistance: false,
+  description: '',
+  amount: 0,
+  receiptUrl: ''
+});
+
 export default function NewClaim() {
   const [searchParams] = useSearchParams();
-  const type = searchParams.get('type') || 'travel';
+  const type = (searchParams.get('type') as 'travel' | 'misc') || 'travel';
   const editId = searchParams.get('edit');
-  const { currentUser, projects, addExpenseItem, updateItem, items } = useStore();
+  const prefillProjectId = searchParams.get('project') || '';
+  
+  const { currentUser, projects, addExpenseItem, updateItem, items, projectRoutes } = useStore();
   const navigate = useNavigate();
 
-  const [projectId, setProjectId] = useState<string>('');
-  const [dates, setDates] = useState<Date[]>([new Date()]);
+  const [drafts, setDrafts] = useState<Draft[]>([createEmptyDraft(type, prefillProjectId)]);
+  const [currentIndex, setCurrentIndex] = useState(0);
   
-  // Travel specific
-  const [origin, setOrigin] = useState<string>('');
-  const [destination, setDestination] = useState<string>('');
-  const [distance, setDistance] = useState<number>(0);
-  const [isManualDistance, setIsManualDistance] = useState<boolean>(false);
+  const currentDraft = drafts[currentIndex] || drafts[0];
+
+  const updateCurrentDraft = useCallback((updates: Partial<Draft>) => {
+    setDrafts(prev => prev.map((d, i) => i === currentIndex ? { ...d, ...updates } : d));
+  }, [currentIndex]);
+
   const [directionsResponse, setDirectionsResponse] = useState<google.maps.DirectionsResult | null>(null);
-  
-  // Round trip specific
-  const [isRoundTrip, setIsRoundTrip] = useState<boolean>(false);
-  const [returnDistance, setReturnDistance] = useState<number>(0);
-  const [isReturnManualDistance, setIsReturnManualDistance] = useState<boolean>(false);
   const [returnDirectionsResponse, setReturnDirectionsResponse] = useState<google.maps.DirectionsResult | null>(null);
 
   const [isLocationPickerOpen, setIsLocationPickerOpen] = useState(false);
   const [pickerType, setPickerType] = useState<'origin' | 'destination'>('origin');
   const [originAutocomplete, setOriginAutocomplete] = useState<google.maps.places.Autocomplete | null>(null);
   const [destAutocomplete, setDestAutocomplete] = useState<google.maps.places.Autocomplete | null>(null);
+  const [isOcrLoading, setIsOcrLoading] = useState(false);
+
+  useEffect(() => {
+    if (editId) {
+      const itemToEdit = items.find(item => item.id === editId);
+      if (itemToEdit) {
+        setDrafts([{
+          id: itemToEdit.id,
+          type: itemToEdit.type,
+          projectId: itemToEdit.projectCodeId,
+          dates: [new Date(itemToEdit.date)],
+          origin: itemToEdit.origin || '',
+          destination: itemToEdit.destination || '',
+          distance: itemToEdit.distance || 0,
+          isManualDistance: true,
+          isRoundTrip: false,
+          returnDistance: 0,
+          isReturnManualDistance: false,
+          description: itemToEdit.description || '',
+          amount: itemToEdit.amount,
+          receiptUrl: itemToEdit.receiptUrl || ''
+        }]);
+        setCurrentIndex(0);
+      }
+    }
+  }, [editId, items]);
+
+  const apiKey = (import.meta as any).env.VITE_GOOGLE_MAPS_API_KEY || '';
+  const { isLoaded } = useJsApiLoader({
+    id: 'google-map-script',
+    googleMapsApiKey: apiKey,
+    libraries,
+  });
 
   const onOriginPlaceChanged = () => {
     if (originAutocomplete !== null) {
       const place = originAutocomplete.getPlace();
-      setOrigin(place.formatted_address || place.name || '');
-      setIsManualDistance(false);
+      updateCurrentDraft({ origin: place.formatted_address || place.name || '', isManualDistance: false });
     }
   };
 
   const onDestPlaceChanged = () => {
     if (destAutocomplete !== null) {
       const place = destAutocomplete.getPlace();
-      setDestination(place.formatted_address || place.name || '');
-      setIsManualDistance(false);
+      updateCurrentDraft({ destination: place.formatted_address || place.name || '', isManualDistance: false });
     }
   };
 
-  // Misc specific
-  const [description, setDescription] = useState<string>('');
-  const [amount, setAmount] = useState<number>(0);
-  const [isOcrLoading, setIsOcrLoading] = useState(false);
-  const [receiptUrl, setReceiptUrl] = useState<string>('');
-
   useEffect(() => {
-    if (editId) {
-      const itemToEdit = items.find(item => item.id === editId);
-      if (itemToEdit) {
-        setProjectId(itemToEdit.projectCodeId);
-        setDates([new Date(itemToEdit.date)]);
-        if (itemToEdit.type === 'travel') {
-          setOrigin(itemToEdit.origin || '');
-          setDestination(itemToEdit.destination || '');
-          setDistance(itemToEdit.distance || 0);
-          setIsManualDistance(true);
-        } else {
-          setDescription(itemToEdit.description || '');
-          setAmount(itemToEdit.amount);
-          setReceiptUrl(itemToEdit.receiptUrl || '');
-        }
-      }
-    }
-  }, [editId, items]);
-
-  const apiKey = (import.meta as any).env.VITE_GOOGLE_MAPS_API_KEY || '';
-  const { isLoaded, loadError } = useJsApiLoader({
-    id: 'google-map-script',
-    googleMapsApiKey: apiKey,
-    libraries,
-  });
+    setDirectionsResponse(null);
+    setReturnDirectionsResponse(null);
+  }, [currentIndex]);
 
   const calculateRoute = useCallback(() => {
-    if (!origin || !destination || !isLoaded || isManualDistance) return;
+    if (!currentDraft.origin || !currentDraft.destination || !isLoaded) return;
 
     const directionsService = new google.maps.DirectionsService();
     directionsService.route(
       {
-        origin: origin,
-        destination: destination,
+        origin: currentDraft.origin,
+        destination: currentDraft.destination,
         travelMode: google.maps.TravelMode.DRIVING,
       },
       (result, status) => {
         if (status === google.maps.DirectionsStatus.OK && result) {
           setDirectionsResponse(result);
-          const distanceInMeters = result.routes[0].legs[0].distance?.value || 0;
-          setDistance(distanceInMeters / 1000); // Convert to km
+          if (!currentDraft.isManualDistance) {
+            const distanceInMeters = result.routes[0].legs[0].distance?.value || 0;
+            updateCurrentDraft({ distance: Math.round(distanceInMeters / 1000) }); // Convert to km and round
+          }
         } else {
-          toast.error('ไม่สามารถคำนวณเส้นทางไปได้');
           setDirectionsResponse(null);
-          setDistance(0);
+          if (!currentDraft.isManualDistance) {
+            toast.error('ไม่สามารถคำนวณเส้นทางไปได้');
+            updateCurrentDraft({ distance: 0 });
+          }
         }
       }
     );
-  }, [origin, destination, isLoaded, isManualDistance]);
+  }, [currentDraft.origin, currentDraft.destination, isLoaded, currentDraft.isManualDistance, updateCurrentDraft]);
 
   const calculateReturnRoute = useCallback(() => {
-    if (!origin || !destination || !isLoaded || isReturnManualDistance || !isRoundTrip) return;
+    if (!currentDraft.origin || !currentDraft.destination || !isLoaded || !currentDraft.isRoundTrip) return;
 
     const directionsService = new google.maps.DirectionsService();
     directionsService.route(
       {
-        origin: destination,
-        destination: origin,
+        origin: currentDraft.destination,
+        destination: currentDraft.origin,
         travelMode: google.maps.TravelMode.DRIVING,
       },
       (result, status) => {
         if (status === google.maps.DirectionsStatus.OK && result) {
           setReturnDirectionsResponse(result);
-          const distanceInMeters = result.routes[0].legs[0].distance?.value || 0;
-          setReturnDistance(distanceInMeters / 1000); // Convert to km
+          if (!currentDraft.isReturnManualDistance) {
+            const distanceInMeters = result.routes[0].legs[0].distance?.value || 0;
+            updateCurrentDraft({ returnDistance: Math.round(distanceInMeters / 1000) }); // Convert to km and round
+          }
         } else {
-          toast.error('ไม่สามารถคำนวณเส้นทางกลับได้');
           setReturnDirectionsResponse(null);
-          setReturnDistance(0);
+          if (!currentDraft.isReturnManualDistance) {
+            toast.error('ไม่สามารถคำนวณเส้นทางกลับได้');
+            updateCurrentDraft({ returnDistance: 0 });
+          }
         }
       }
     );
-  }, [origin, destination, isLoaded, isReturnManualDistance, isRoundTrip]);
+  }, [currentDraft.origin, currentDraft.destination, isLoaded, currentDraft.isReturnManualDistance, currentDraft.isRoundTrip, updateCurrentDraft]);
 
   useEffect(() => {
-    if (origin && destination && !isManualDistance) {
+    if (currentDraft.origin && currentDraft.destination) {
       calculateRoute();
     }
-  }, [origin, destination, calculateRoute, isManualDistance]);
+  }, [currentDraft.origin, currentDraft.destination, calculateRoute]);
 
   useEffect(() => {
-    if (isRoundTrip && origin && destination && !isReturnManualDistance) {
+    if (currentDraft.isRoundTrip && currentDraft.origin && currentDraft.destination) {
       calculateReturnRoute();
     }
-  }, [isRoundTrip, origin, destination, calculateReturnRoute, isReturnManualDistance]);
+  }, [currentDraft.isRoundTrip, currentDraft.origin, currentDraft.destination, calculateReturnRoute]);
 
-  const travelAmount = distance * 7; // km * 7
-  const returnTravelAmount = returnDistance * 7;
-  const totalTravelAmount = travelAmount + (isRoundTrip ? returnTravelAmount : 0);
+  const travelAmount = currentDraft.distance * 7; // km * 7
+  const returnTravelAmount = currentDraft.returnDistance * 7;
+  const totalTravelAmount = travelAmount + (currentDraft.isRoundTrip ? returnTravelAmount : 0);
 
-  const handleSave = () => {
-    if (!projectId) {
-      toast.error('กรุณาเลือกโครงการ');
-      return;
+  const validateDraft = (draft: Draft) => {
+    if (!draft.projectId) return 'กรุณาเลือกโครงการ';
+    if (!draft.dates || draft.dates.length === 0) return 'กรุณาเลือกวันที่';
+    
+    if (draft.type === 'travel') {
+      if (!draft.origin || !draft.destination || draft.distance === 0) return 'กรุณาระบุต้นทางและปลายทางให้ถูกต้อง';
+    } else {
+      if (!draft.description || !draft.amount) return 'กรุณาระบุรายละเอียดและจำนวนเงิน';
     }
-    if (!dates || dates.length === 0) {
-      toast.error('กรุณาเลือกวันที่');
-      return;
-    }
+    return null;
+  };
 
-    if (type === 'travel') {
-      if (!origin || !destination || distance === 0) {
-        toast.error('กรุณาระบุต้นทางและปลายทางให้ถูกต้อง');
-        return;
-      }
+  const saveDraftToStore = (draft: Draft) => {
+    const staticMapUrl = apiKey && draft.type === 'travel' ? `https://maps.googleapis.com/maps/api/staticmap?size=600x300&markers=color:green|label:A|${encodeURIComponent(draft.origin)}&markers=color:red|label:B|${encodeURIComponent(draft.destination)}&path=color:0x0000ff|weight:5|${encodeURIComponent(draft.origin)}|${encodeURIComponent(draft.destination)}&key=${apiKey}` : undefined;
+    const returnStaticMapUrl = apiKey && draft.type === 'travel' && draft.isRoundTrip ? `https://maps.googleapis.com/maps/api/staticmap?size=600x300&markers=color:green|label:A|${encodeURIComponent(draft.destination)}&markers=color:red|label:B|${encodeURIComponent(draft.origin)}&path=color:0x0000ff|weight:5|${encodeURIComponent(draft.destination)}|${encodeURIComponent(draft.origin)}&key=${apiKey}` : undefined;
+
+    if (editId) {
+      updateItem(editId, {
+        projectCodeId: draft.projectId,
+        amount: draft.type === 'travel' ? (draft.distance * 7) : draft.amount,
+        date: format(draft.dates[0], 'yyyy-MM-dd'),
+        origin: draft.origin,
+        destination: draft.destination,
+        distance: draft.distance,
+        description: draft.description,
+        receiptUrl: draft.type === 'travel' ? staticMapUrl : (draft.receiptUrl || undefined),
+      });
       
-      const staticMapUrl = apiKey ? `https://maps.googleapis.com/maps/api/staticmap?size=600x300&markers=color:green|label:A|${encodeURIComponent(origin)}&markers=color:red|label:B|${encodeURIComponent(destination)}&path=color:0x0000ff|weight:5|${encodeURIComponent(origin)}|${encodeURIComponent(destination)}&key=${apiKey}` : undefined;
-      const returnStaticMapUrl = apiKey && isRoundTrip ? `https://maps.googleapis.com/maps/api/staticmap?size=600x300&markers=color:green|label:A|${encodeURIComponent(destination)}&markers=color:red|label:B|${encodeURIComponent(origin)}&path=color:0x0000ff|weight:5|${encodeURIComponent(destination)}|${encodeURIComponent(origin)}&key=${apiKey}` : undefined;
-
-      if (editId) {
-        updateItem(editId, {
-          projectCodeId: projectId,
-          amount: travelAmount,
-          date: format(dates[0], 'yyyy-MM-dd'),
-          origin,
-          destination,
-          distance,
-          receiptUrl: staticMapUrl,
+      if (draft.type === 'travel' && draft.isRoundTrip) {
+        addExpenseItem({
+          userId: currentUser!.id,
+          projectCodeId: draft.projectId,
+          type: 'travel',
+          amount: draft.returnDistance * 7,
+          date: format(draft.dates[0], 'yyyy-MM-dd'),
+          origin: draft.destination,
+          destination: draft.origin,
+          distance: draft.returnDistance,
+          receiptUrl: returnStaticMapUrl,
         });
-        
-        if (isRoundTrip) {
+      }
+    } else {
+      draft.dates.forEach(d => {
+        const dateStr = format(d, 'yyyy-MM-dd');
+        addExpenseItem({
+          userId: currentUser!.id,
+          projectCodeId: draft.projectId,
+          type: draft.type,
+          amount: draft.type === 'travel' ? (draft.distance * 7) : draft.amount,
+          date: dateStr,
+          origin: draft.origin,
+          destination: draft.destination,
+          distance: draft.distance,
+          description: draft.description,
+          receiptUrl: draft.type === 'travel' ? staticMapUrl : (draft.receiptUrl || undefined),
+        });
+
+        if (draft.type === 'travel' && draft.isRoundTrip) {
           addExpenseItem({
             userId: currentUser!.id,
-            projectCodeId: projectId,
+            projectCodeId: draft.projectId,
             type: 'travel',
-            amount: returnTravelAmount,
-            date: format(dates[0], 'yyyy-MM-dd'),
-            origin: destination,
-            destination: origin,
-            distance: returnDistance,
+            amount: draft.returnDistance * 7,
+            date: dateStr,
+            origin: draft.destination,
+            destination: draft.origin,
+            distance: draft.returnDistance,
             receiptUrl: returnStaticMapUrl,
           });
         }
-        toast.success(`แก้ไขรายการแล้ว`);
-      } else {
-        dates.forEach(d => {
-          const dateStr = format(d, 'yyyy-MM-dd');
-          addExpenseItem({
-            userId: currentUser!.id,
-            projectCodeId: projectId,
-            type: 'travel',
-            amount: travelAmount,
-            date: dateStr,
-            origin,
-            destination,
-            distance,
-            receiptUrl: staticMapUrl,
-          });
+      });
+    }
+  };
 
-          if (isRoundTrip) {
-            addExpenseItem({
-              userId: currentUser!.id,
-              projectCodeId: projectId,
-              type: 'travel',
-              amount: returnTravelAmount,
-              date: dateStr,
-              origin: destination,
-              destination: origin,
-              distance: returnDistance,
-              receiptUrl: returnStaticMapUrl,
-            });
-          }
-        });
-        toast.success(`บันทึกรายการแล้ว ${dates.length * (isRoundTrip ? 2 : 1)} รายการ · ฿${(totalTravelAmount * dates.length).toFixed(2)}`);
-      }
-      
+  const handleSaveCurrent = () => {
+    const error = validateDraft(currentDraft);
+    if (error) {
+      toast.error(error);
+      return;
+    }
+
+    saveDraftToStore(currentDraft);
+    toast.success('บันทึกรายการสำเร็จ');
+
+    if (drafts.length === 1) {
       navigate('/claims');
     } else {
-      if (!description || !amount) return;
-      
-      if (editId) {
-        updateItem(editId, {
-          projectCodeId: projectId,
-          amount,
-          date: format(dates[0], 'yyyy-MM-dd'),
-          description,
-          receiptUrl: receiptUrl || undefined,
-        });
-        toast.success(`แก้ไขรายการแล้ว`);
-      } else {
-        dates.forEach(d => {
-          const dateStr = format(d, 'yyyy-MM-dd');
-          addExpenseItem({
-            userId: currentUser!.id,
-            projectCodeId: projectId,
-            type: 'misc',
-            amount,
-            date: dateStr,
-            description,
-            receiptUrl: receiptUrl || undefined,
-          });
-        });
-        toast.success(`บันทึกรายการแล้ว ${dates.length} รายการ · ฿${(amount * dates.length).toFixed(2)}`);
+      const newDrafts = drafts.filter((_, idx) => idx !== currentIndex);
+      setDrafts(newDrafts);
+      if (currentIndex >= newDrafts.length) {
+        setCurrentIndex(newDrafts.length - 1);
       }
-      
+    }
+  };
+
+  const handleSaveAll = () => {
+    for (let i = 0; i < drafts.length; i++) {
+      const error = validateDraft(drafts[i]);
+      if (error) {
+        setCurrentIndex(i);
+        toast.error(`รายการที่ ${i + 1}: ${error}`);
+        return;
+      }
+    }
+
+    drafts.forEach(draft => saveDraftToStore(draft));
+    toast.success(`บันทึกสำเร็จทั้งหมด ${drafts.length} รายการ`);
+    navigate('/claims');
+  };
+
+  const handleAddNew = () => {
+    const newDraft = createEmptyDraft(type, currentDraft.projectId);
+    setDrafts([...drafts, newDraft]);
+    setCurrentIndex(drafts.length);
+  };
+
+  const handleRemoveCurrent = () => {
+    if (drafts.length === 1) {
       navigate('/claims');
+      return;
+    }
+    const newDrafts = drafts.filter((_, idx) => idx !== currentIndex);
+    setDrafts(newDrafts);
+    if (currentIndex >= newDrafts.length) {
+      setCurrentIndex(newDrafts.length - 1);
+    }
+  };
+
+  const handleImportCalendar = () => {
+    const newDrafts = mockCalendarEvents.map((event, index) => ({
+      id: `cal-${Date.now()}-${index}`,
+      type: 'travel' as const,
+      projectId: projects.find(p => p.code === event.projectCode)?.id || currentDraft.projectId,
+      dates: [event.date],
+      origin: currentUser?.officeAddress || '',
+      destination: event.location,
+      distance: 0,
+      isManualDistance: false,
+      isRoundTrip: false,
+      returnDistance: 0,
+      isReturnManualDistance: false,
+      description: event.title,
+      amount: 0,
+      receiptUrl: ''
+    }));
+    
+    setDrafts(prev => {
+      const isEmpty = prev.length === 1 && !prev[0].projectId && !prev[0].origin && !prev[0].destination && !prev[0].description && prev[0].amount === 0;
+      if (isEmpty) {
+        return newDrafts;
+      }
+      return [...prev, ...newDrafts];
+    });
+    
+    toast.success(`นำเข้า ${newDrafts.length} รายการจาก Calendar`);
+    if (type !== 'travel') {
+      navigate('/claims/new?type=travel');
     }
   };
 
   const handleOcrMock = () => {
     setIsOcrLoading(true);
     setTimeout(() => {
-      setDates([new Date(2026, 2, 18)]);
-      setDescription('Grab receipt');
-      setAmount(350);
-      setReceiptUrl('https://images.unsplash.com/photo-1554224155-8d04cb21cd6c?q=80&w=600&auto=format&fit=crop');
+      updateCurrentDraft({
+        dates: [new Date(2026, 2, 18)],
+        description: 'Grab receipt',
+        amount: 350,
+        receiptUrl: 'https://images.unsplash.com/photo-1554224155-8d04cb21cd6c?q=80&w=600&auto=format&fit=crop'
+      });
       setIsOcrLoading(false);
       toast.success('ดึงข้อมูลจากใบเสร็จสำเร็จ');
     }, 1500);
@@ -292,10 +388,12 @@ export default function NewClaim() {
   const [isRoutePickerOpen, setIsRoutePickerOpen] = useState(false);
 
   const handleRouteConfirm = (route: { origin: string; destination: string; distance: number }) => {
-    setOrigin(route.origin);
-    setDestination(route.destination);
-    setDistance(route.distance);
-    setIsManualDistance(true); // We already calculated it in the modal
+    updateCurrentDraft({
+      origin: route.origin,
+      destination: route.destination,
+      distance: Math.round(route.distance),
+      isManualDistance: true
+    });
     
     if (isLoaded) {
       const directionsService = new google.maps.DirectionsService();
@@ -314,367 +412,277 @@ export default function NewClaim() {
     }
   };
 
-  const groupedEvents = useMemo(() => {
-    return mockCalendarEvents.reduce((acc, event) => {
-      if (!acc[event.location]) acc[event.location] = [];
-      acc[event.location].push(event);
-      return acc;
-    }, {} as Record<string, typeof mockCalendarEvents>);
-  }, []);
-
-  const handleApplyCalendarEventGroup = (location: string, events: typeof mockCalendarEvents) => {
-    const project = projects.find(p => p.code === events[0].projectCode);
-    if (project) setProjectId(project.id);
-    setDestination(location);
-    setDates(events.map(e => e.date));
-    
-    // Auto-fill logic
-    const matchingPresets = currentUser?.presetRoutes?.filter(r => r.destination === location) || [];
-    if (matchingPresets.length === 1) {
-      const route = matchingPresets[0];
-      setOrigin(route.origin);
-      setDistance(route.distance);
-      setIsManualDistance(true);
-      setDirectionsResponse(null);
-      toast.success(`ใช้เส้นทางประจำอัตโนมัติ: ${route.name}`);
-    } else if (currentUser?.homeAddress) {
-      // Fallback to home address if no single preset matches
-      setOrigin(currentUser.homeAddress);
-      setIsManualDistance(false);
-      toast.success(`ดึงข้อมูลจากปฏิทิน: ${location}`);
-    } else {
-      toast.success(`ดึงข้อมูลจากปฏิทิน: ${location}`);
-    }
-  };
-
-  const handleApplyPresetRoute = (route: PresetRoute) => {
-    setIsManualDistance(true);
-    setOrigin(route.origin);
-    setDestination(route.destination);
-    setDistance(route.distance);
-    setDirectionsResponse(null);
-    toast.success(`ใช้เส้นทางประจำ: ${route.name}`);
-  };
-
-  const handleSuggestPick = (type: 'home-dest' | 'home-work' | 'work-home') => {
-    setIsManualDistance(false);
-    if (type === 'home-dest' && currentUser?.homeAddress && destination) {
-      setOrigin(currentUser.homeAddress);
-      toast.success('เลือกเส้นทาง บ้าน -> ปลายทาง');
-    } else if (type === 'home-work' && currentUser?.homeAddress && currentUser?.officeAddress) {
-      setOrigin(currentUser.homeAddress);
-      setDestination(currentUser.officeAddress);
-      toast.success('เลือกเส้นทาง บ้าน -> ที่ทำงาน');
-    } else if (type === 'work-home' && currentUser?.homeAddress && currentUser?.officeAddress) {
-      setOrigin(currentUser.officeAddress);
-      setDestination(currentUser.homeAddress);
-      toast.success('เลือกเส้นทาง ที่ทำงาน -> บ้าน');
-    } else {
-      toast.error('กรุณาตั้งค่าที่อยู่บ้านและที่ทำงานในหน้าตั้งค่าก่อน');
-      navigate('/settings');
-    }
-  };
-
   return (
     <div className="max-w-xl mx-auto space-y-6 pb-24">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold tracking-tight text-slate-800">
           {type === 'travel' ? 'เบิกค่าเดินทาง' : 'เบิกค่าใช้จ่ายอื่นๆ'}
         </h1>
-        <Button variant="ghost" className="text-slate-500 hover:text-slate-800" onClick={() => navigate(-1)}>ยกเลิก</Button>
+        <div className="flex gap-2">
+          {!editId && type === 'travel' && (
+            <Button variant="outline" size="sm" onClick={handleImportCalendar} className="text-blue-600 border-blue-200 hover:bg-blue-50">
+              <CalendarIcon className="w-4 h-4 mr-1" /> นำเข้าจาก Calendar
+            </Button>
+          )}
+          <Button variant="ghost" className="text-slate-500 hover:text-slate-800" onClick={() => navigate(-1)}>ยกเลิก</Button>
+        </div>
       </div>
 
-      <Card className="shadow-sm rounded-2xl border-slate-200">
+      {!editId && drafts.length > 1 && (
+        <div className="fixed top-20 right-4 z-40">
+          <span className="text-sm font-medium text-slate-600 bg-white/90 backdrop-blur-sm px-3 py-1.5 rounded-full shadow-md border border-slate-200">
+            รายการที่ {currentIndex + 1} / {drafts.length}
+          </span>
+        </div>
+      )}
+
+      {!editId && drafts.length > 1 && (
+        <>
+          <Button
+            variant="outline"
+            size="icon"
+            className="fixed left-2 md:left-4 top-1/2 -translate-y-1/2 z-50 h-10 w-10 md:h-12 md:w-12 rounded-full shadow-lg bg-white flex items-center justify-center"
+            disabled={currentIndex === 0}
+            onClick={() => setCurrentIndex(prev => prev - 1)}
+          >
+            <ChevronLeft className="w-5 h-5 md:w-6 md:h-6" />
+          </Button>
+          <Button
+            variant="outline"
+            size="icon"
+            className="fixed right-2 md:right-4 top-1/2 -translate-y-1/2 z-50 h-10 w-10 md:h-12 md:w-12 rounded-full shadow-lg bg-white flex items-center justify-center"
+            disabled={currentIndex === drafts.length - 1}
+            onClick={() => setCurrentIndex(prev => prev + 1)}
+          >
+            <ChevronRight className="w-5 h-5 md:w-6 md:h-6" />
+          </Button>
+        </>
+      )}
+
+      <Card className="shadow-sm rounded-2xl border-slate-200 relative overflow-hidden">
+        {drafts.length > 1 && (
+          <div className="absolute top-0 left-0 w-full h-1 bg-slate-100">
+            <div 
+              className="h-full bg-blue-500 transition-all duration-300" 
+              style={{ width: `${((currentIndex + 1) / drafts.length) * 100}%` }}
+            />
+          </div>
+        )}
         <CardContent className="pt-6 space-y-6">
           <div className="space-y-3">
             <Label className="text-slate-700">โครงการ</Label>
             <ProjectCombobox 
               projects={projects} 
-              value={projectId} 
-              onChange={setProjectId} 
+              value={currentDraft.projectId} 
+              onChange={(val) => updateCurrentDraft({ projectId: val })} 
             />
           </div>
 
           <div className="space-y-3">
             <Label className="text-slate-700">วันที่ (เลือกได้หลายวัน)</Label>
             <Popover>
-              <PopoverTrigger 
-                render={
-                  <Button
-                    variant={"outline"}
-                    className={cn(
-                      "w-full justify-start text-left font-normal rounded-xl h-12 bg-slate-50 border-slate-200",
-                      !dates.length && "text-muted-foreground"
-                    )}
-                  >
-                    <CalendarIcon className="mr-2 h-4 w-4" />
-                    {dates.length > 0 ? (
-                      dates.length === 1 ? format(dates[0], "PPP") : `${dates.length} วันที่เลือก`
-                    ) : (
-                      <span>เลือกวันที่</span>
-                    )}
-                  </Button>
-                }
-              />
+              <PopoverTrigger render={
+                <Button
+                  variant={"outline"}
+                  className={cn(
+                    "w-full justify-start text-left font-normal h-12 rounded-xl bg-slate-50 border-slate-200",
+                    !currentDraft.dates.length && "text-muted-foreground"
+                  )}
+                >
+                  <CalendarIcon className="mr-2 h-4 w-4 text-slate-500" />
+                  {currentDraft.dates.length > 0 ? (
+                    currentDraft.dates.length === 1 ? format(currentDraft.dates[0], "PPP") : `เลือกแล้ว ${currentDraft.dates.length} วัน`
+                  ) : (
+                    <span>เลือกวันที่</span>
+                  )}
+                </Button>
+              } />
               <PopoverContent className="w-auto p-0" align="start">
                 <Calendar
                   mode="multiple"
-                  selected={dates}
-                  onSelect={(d) => setDates(d as Date[])}
+                  selected={currentDraft.dates}
+                  onSelect={(dates) => updateCurrentDraft({ dates: dates as Date[] })}
                   initialFocus
                 />
               </PopoverContent>
             </Popover>
-            <p className="text-xs text-slate-500">แต่ละวันจะถูกแยกเป็น 1 รายการ</p>
+            {currentDraft.dates.length > 1 && (
+              <div className="flex flex-wrap gap-1 mt-2">
+                {currentDraft.dates.map((d, i) => (
+                  <div key={i} className="inline-flex items-center rounded-md border px-2.5 py-0.5 text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 border-transparent bg-secondary text-secondary-foreground hover:bg-secondary/80">
+                    {format(d, "d MMM yyyy")}
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           {type === 'travel' && (
             <>
-              {Object.keys(groupedEvents).length > 0 && (
-                <div className="space-y-3">
-                  <Label className="text-slate-700 flex items-center gap-2"><CalendarIcon className="w-4 h-4" /> แนะนำจาก Google Calendar</Label>
-                  <div className="space-y-2">
-                    {(Object.entries(groupedEvents) as [string, typeof mockCalendarEvents][]).map(([location, events]) => (
-                      <div 
-                        key={location} 
-                        className="flex items-center justify-between p-3 bg-white rounded-xl border border-blue-100 shadow-sm cursor-pointer hover:border-blue-300 transition-colors"
-                        onClick={() => handleApplyCalendarEventGroup(location, events)}
-                      >
-                        <div>
-                          <p className="font-medium text-sm text-slate-800 flex items-center gap-1">
-                            <MapPin className="w-4 h-4 text-blue-500" /> {location}
-                          </p>
-                          <p className="text-xs text-slate-500 mt-1">
-                            {events.map(e => format(e.date, 'd MMM')).join(', ')} ({events.length} วัน)
-                          </p>
-                        </div>
-                        <div className="text-right">
-                          <p className="text-xs text-slate-500">Proj: {events[0].projectCode}</p>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {!apiKey && (
-                <div className="p-3 bg-yellow-50 text-yellow-800 rounded-xl flex items-start gap-2 text-sm border border-yellow-200">
-                  <AlertTriangle className="h-5 w-5 shrink-0" />
-                  <div>
-                    <p className="font-semibold">Missing Google Maps API Key</p>
-                    <p>Please add <code className="bg-yellow-100 px-1 rounded">VITE_GOOGLE_MAPS_API_KEY</code> to your <code className="bg-yellow-100 px-1 rounded">.env</code> file to enable location search and route calculation.</p>
-                  </div>
-                </div>
-              )}
-
-              {loadError && (
-                <div className="p-3 bg-red-50 text-red-800 rounded-xl flex items-start gap-2 text-sm border border-red-200">
-                  <AlertTriangle className="h-5 w-5 shrink-0" />
-                  <div>
-                    <p className="font-semibold">Google Maps API Error</p>
-                    <p>The provided API key is invalid or restricted. Please ensure Maps JavaScript API, Places API, Geocoding API, and Directions API are enabled in Google Cloud Console.</p>
-                  </div>
-                </div>
-              )}
-
               <div className="space-y-4">
-                <div className="space-y-3">
-                  <Label className="flex items-center gap-2 text-slate-700"><Route className="w-4 h-4" /> เส้นทางแนะนำ (Suggest Pick)</Label>
-                  <div className="flex flex-wrap gap-2">
-                    {destination && (
-                      <Button 
-                        variant="outline" 
-                        size="sm" 
-                        onClick={() => handleSuggestPick('home-dest')}
-                        className="bg-slate-50 border-slate-200 text-slate-700 rounded-xl hover:bg-blue-50 hover:text-blue-700 hover:border-blue-200"
-                      >
-                        <Home className="w-3 h-3 mr-1" /> บ้าน <ArrowRightLeft className="w-3 h-3 mx-1" /> ปลายทาง
-                      </Button>
-                    )}
-                    {!destination && (
-                      <>
-                        <Button 
-                          variant="outline" 
-                          size="sm" 
-                          onClick={() => handleSuggestPick('home-work')}
-                          className="bg-slate-50 border-slate-200 text-slate-700 rounded-xl hover:bg-blue-50 hover:text-blue-700 hover:border-blue-200"
-                        >
-                          <Home className="w-3 h-3 mr-1" /> บ้าน <ArrowRightLeft className="w-3 h-3 mx-1" /> ที่ทำงาน
-                        </Button>
-                        <Button 
-                          variant="outline" 
-                          size="sm" 
-                          onClick={() => handleSuggestPick('work-home')}
-                          className="bg-slate-50 border-slate-200 text-slate-700 rounded-xl hover:bg-blue-50 hover:text-blue-700 hover:border-blue-200"
-                        >
-                          <Building className="w-3 h-3 mr-1" /> ที่ทำงาน <ArrowRightLeft className="w-3 h-3 mx-1" /> บ้าน
-                        </Button>
-                      </>
-                    )}
-                    {currentUser?.presetRoutes && currentUser.presetRoutes.filter(r => !destination || r.destination === destination).map(route => (
+                <div className="flex items-center justify-between">
+                  <Label className="text-slate-700">เส้นทาง</Label>
+                  <Button variant="ghost" size="sm" className="text-blue-600 h-8 px-2" onClick={() => setIsRoutePickerOpen(true)}>
+                    <MapPin className="w-4 h-4 mr-1" /> ปักหมุดบนแผนที่
+                  </Button>
+                </div>
+                
+                {currentDraft.projectId && projectRoutes.filter(pr => pr.projectId === currentDraft.projectId).length > 0 && (
+                  <div className="flex flex-wrap gap-2 mt-[-8px]">
+                    {projectRoutes.filter(pr => pr.projectId === currentDraft.projectId).map(route => (
                       <Button 
                         key={route.id} 
                         variant="outline" 
                         size="sm" 
-                        onClick={() => handleApplyPresetRoute(route)}
-                        className="bg-slate-50 border-slate-200 text-slate-700 rounded-xl hover:bg-blue-50 hover:text-blue-700 hover:border-blue-200"
+                        className="text-xs rounded-full bg-blue-50/50 border-blue-200 text-blue-700 hover:bg-blue-100 hover:text-blue-800"
+                        onClick={() => {
+                          updateCurrentDraft({
+                            origin: route.origin,
+                            destination: route.destination,
+                            distance: route.distance,
+                            isManualDistance: false
+                          });
+                        }}
                       >
-                        {route.name}
+                        <Route className="w-3 h-3 mr-1" />
+                        {route.origin} <ArrowRight className="w-3 h-3 mx-1 text-blue-400" /> {route.destination}
                       </Button>
                     ))}
                   </div>
-                </div>
-
-                <div className="space-y-4">
-                  <div className="space-y-2">
-                    <Label className="text-slate-700">ต้นทาง</Label>
-                    <div className="flex gap-2">
-                      <div className="relative flex-1">
-                        <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400 z-20" />
-                        {isLoaded ? (
-                          <Autocomplete onLoad={setOriginAutocomplete} onPlaceChanged={onOriginPlaceChanged}>
-                            <Input 
-                              placeholder="ค้นหาต้นทาง..."
-                              className="pl-10 h-12 rounded-xl bg-slate-50 border-slate-200"
-                              value={origin}
-                              onChange={(e) => { setOrigin(e.target.value); setIsManualDistance(false); }}
-                            />
-                          </Autocomplete>
-                        ) : (
-                          <Input 
-                            placeholder="ค้นหาต้นทาง..."
-                            className="pl-10 h-12 rounded-xl bg-slate-50 border-slate-200"
-                            value={origin}
-                            onChange={(e) => { setOrigin(e.target.value); setIsManualDistance(false); }}
-                          />
-                        )}
-                      </div>
-                      <Button variant="outline" className="h-12 w-12 shrink-0 rounded-xl" onClick={() => { setPickerType('origin'); setIsLocationPickerOpen(true); }}>
-                        <Search className="h-5 w-5" />
-                      </Button>
+                )}
+                
+                <div className="relative space-y-3 p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                  <div className="absolute left-7 top-10 bottom-10 w-0.5 bg-slate-200 z-0"></div>
+                  
+                  <div className="relative z-10 flex gap-3">
+                    <div className="mt-3 w-6 h-6 rounded-full bg-green-100 flex items-center justify-center shrink-0 border-2 border-white shadow-sm">
+                      <div className="w-2 h-2 rounded-full bg-green-600"></div>
                     </div>
-                    <div className="flex gap-2 mt-1">
-                      {currentUser?.homeAddress && (
-                        <Button variant="ghost" size="sm" className="h-6 text-xs text-slate-500 hover:text-blue-600" onClick={() => { setOrigin(currentUser.homeAddress!); setIsManualDistance(false); }}>
-                          <Home className="w-3 h-3 mr-1" /> บ้าน
+                    <div className="flex-1 space-y-1">
+                      <div className="flex justify-between items-center">
+                        <Label className="text-xs text-slate-500 font-medium">ต้นทาง</Label>
+                        <div className="flex gap-1">
+                          <button type="button" onClick={() => updateCurrentDraft({ origin: currentUser?.homeAddress || '', isManualDistance: false })} className="text-[10px] px-2 py-0.5 bg-slate-100 hover:bg-slate-200 rounded text-slate-600 transition-colors">บ้าน</button>
+                          <button type="button" onClick={() => updateCurrentDraft({ origin: currentUser?.officeAddress || '', isManualDistance: false })} className="text-[10px] px-2 py-0.5 bg-slate-100 hover:bg-slate-200 rounded text-slate-600 transition-colors">ที่ทำงาน</button>
+                        </div>
+                      </div>
+                      <div className="flex gap-2">
+                        <div className="flex-1 relative">
+                          {isLoaded ? (
+                            <Autocomplete onLoad={setOriginAutocomplete} onPlaceChanged={onOriginPlaceChanged}>
+                              <Input 
+                                placeholder="ค้นหาสถานที่ต้นทาง..."
+                                className="h-11 rounded-xl border-slate-200 bg-white pr-8"
+                                value={currentDraft.origin}
+                                onChange={(e) => updateCurrentDraft({ origin: e.target.value, isManualDistance: false })}
+                              />
+                            </Autocomplete>
+                          ) : (
+                            <Input 
+                              placeholder="ค้นหาสถานที่ต้นทาง..."
+                              className="h-11 rounded-xl border-slate-200 bg-white pr-8"
+                              value={currentDraft.origin}
+                              onChange={(e) => updateCurrentDraft({ origin: e.target.value, isManualDistance: false })}
+                            />
+                          )}
+                          {currentDraft.origin && (
+                            <button type="button" onClick={() => updateCurrentDraft({ origin: '', isManualDistance: false })} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1">
+                              <X className="w-4 h-4" />
+                            </button>
+                          )}
+                        </div>
+                        <Button variant="outline" size="icon" className="h-11 w-11 shrink-0 rounded-xl bg-white" onClick={() => { setPickerType('origin'); setIsLocationPickerOpen(true); }}>
+                          <MapPin className="w-4 h-4 text-slate-600" />
                         </Button>
-                      )}
-                      {currentUser?.officeAddress && (
-                        <Button variant="ghost" size="sm" className="h-6 text-xs text-slate-500 hover:text-blue-600" onClick={() => { setOrigin(currentUser.officeAddress!); setIsManualDistance(false); }}>
-                          <Building className="w-3 h-3 mr-1" /> ที่ทำงาน
-                        </Button>
-                      )}
+                      </div>
                     </div>
                   </div>
 
-                  <div className="space-y-2">
-                    <Label className="text-slate-700">ปลายทาง</Label>
-                    <div className="flex gap-2">
-                      <div className="relative flex-1">
-                        <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400 z-20" />
-                        {isLoaded ? (
-                          <Autocomplete onLoad={setDestAutocomplete} onPlaceChanged={onDestPlaceChanged}>
-                            <Input 
-                              placeholder="ค้นหาปลายทาง..."
-                              className="pl-10 h-12 rounded-xl bg-slate-50 border-slate-200"
-                              value={destination}
-                              onChange={(e) => { setDestination(e.target.value); setIsManualDistance(false); }}
-                            />
-                          </Autocomplete>
-                        ) : (
-                          <Input 
-                            placeholder="ค้นหาปลายทาง..."
-                            className="pl-10 h-12 rounded-xl bg-slate-50 border-slate-200"
-                            value={destination}
-                            onChange={(e) => { setDestination(e.target.value); setIsManualDistance(false); }}
-                          />
-                        )}
-                      </div>
-                      <Button variant="outline" className="h-12 w-12 shrink-0 rounded-xl" onClick={() => { setPickerType('destination'); setIsLocationPickerOpen(true); }}>
-                        <Search className="h-5 w-5" />
-                      </Button>
+                  <div className="relative z-10 flex gap-3">
+                    <div className="mt-3 w-6 h-6 rounded-full bg-red-100 flex items-center justify-center shrink-0 border-2 border-white shadow-sm">
+                      <div className="w-2 h-2 rounded-full bg-red-600"></div>
                     </div>
-                    <div className="flex gap-2 mt-1">
-                      {currentUser?.homeAddress && (
-                        <Button variant="ghost" size="sm" className="h-6 text-xs text-slate-500 hover:text-blue-600" onClick={() => { setDestination(currentUser.homeAddress!); setIsManualDistance(false); }}>
-                          <Home className="w-3 h-3 mr-1" /> บ้าน
+                    <div className="flex-1 space-y-1">
+                      <div className="flex justify-between items-center">
+                        <Label className="text-xs text-slate-500 font-medium">ปลายทาง</Label>
+                        <div className="flex gap-1">
+                          <button type="button" onClick={() => updateCurrentDraft({ destination: currentUser?.homeAddress || '', isManualDistance: false })} className="text-[10px] px-2 py-0.5 bg-slate-100 hover:bg-slate-200 rounded text-slate-600 transition-colors">บ้าน</button>
+                          <button type="button" onClick={() => updateCurrentDraft({ destination: currentUser?.officeAddress || '', isManualDistance: false })} className="text-[10px] px-2 py-0.5 bg-slate-100 hover:bg-slate-200 rounded text-slate-600 transition-colors">ที่ทำงาน</button>
+                        </div>
+                      </div>
+                      <div className="flex gap-2">
+                        <div className="flex-1 relative">
+                          {isLoaded ? (
+                            <Autocomplete onLoad={setDestAutocomplete} onPlaceChanged={onDestPlaceChanged}>
+                              <Input 
+                                placeholder="ค้นหาสถานที่ปลายทาง..."
+                                className="h-11 rounded-xl border-slate-200 bg-white pr-8"
+                                value={currentDraft.destination}
+                                onChange={(e) => updateCurrentDraft({ destination: e.target.value, isManualDistance: false })}
+                              />
+                            </Autocomplete>
+                          ) : (
+                            <Input 
+                              placeholder="ค้นหาสถานที่ปลายทาง..."
+                              className="h-11 rounded-xl border-slate-200 bg-white pr-8"
+                              value={currentDraft.destination}
+                              onChange={(e) => updateCurrentDraft({ destination: e.target.value, isManualDistance: false })}
+                            />
+                          )}
+                          {currentDraft.destination && (
+                            <button type="button" onClick={() => updateCurrentDraft({ destination: '', isManualDistance: false })} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1">
+                              <X className="w-4 h-4" />
+                            </button>
+                          )}
+                        </div>
+                        <Button variant="outline" size="icon" className="h-11 w-11 shrink-0 rounded-xl bg-white" onClick={() => { setPickerType('destination'); setIsLocationPickerOpen(true); }}>
+                          <MapPin className="w-4 h-4 text-slate-600" />
                         </Button>
-                      )}
-                      {currentUser?.officeAddress && (
-                        <Button variant="ghost" size="sm" className="h-6 text-xs text-slate-500 hover:text-blue-600" onClick={() => { setDestination(currentUser.officeAddress!); setIsManualDistance(false); }}>
-                          <Building className="w-3 h-3 mr-1" /> ที่ทำงาน
-                        </Button>
-                      )}
+                      </div>
                     </div>
                   </div>
-                </div>
-
-                <div className="space-y-3">
-                  <Label className="text-slate-700">ระยะทางขาไป (กม.) - กรอกเองได้หากแผนที่ขัดข้อง</Label>
-                  <Input 
-                    type="number" 
-                    value={distance || ''} 
-                    onChange={(e) => {
-                      setDistance(parseFloat(e.target.value) || 0);
-                      setIsManualDistance(true);
-                    }} 
-                    className="rounded-xl h-12 bg-slate-50 border-slate-200"
-                    placeholder="ระบุระยะทางเป็นกิโลเมตร"
-                  />
                 </div>
 
                 <div className="flex items-center space-x-2 pt-2">
                   <Checkbox 
-                    id="round-trip" 
-                    checked={isRoundTrip} 
-                    onCheckedChange={(c) => setIsRoundTrip(!!c)} 
+                    id="roundtrip" 
+                    checked={currentDraft.isRoundTrip} 
+                    onCheckedChange={(checked) => updateCurrentDraft({ isRoundTrip: checked === true })} 
                   />
-                  <Label htmlFor="round-trip" className="text-slate-700 font-medium cursor-pointer">
-                    เดินทางไป-กลับ (Round trip)
-                  </Label>
+                  <Label htmlFor="roundtrip" className="text-slate-700 cursor-pointer">เบิกขากลับด้วย (สลับต้นทาง-ปลายทาง)</Label>
                 </div>
+              </div>
 
-                {isRoundTrip && (
-                  <div className="space-y-3 p-4 bg-slate-50 rounded-2xl border border-slate-200">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label className="text-slate-700">ระยะทางขาไป (กม.)</Label>
+                  <Input 
+                    type="number" 
+                    value={currentDraft.distance || ''} 
+                    onChange={(e) => updateCurrentDraft({ distance: Math.round(parseFloat(e.target.value) || 0), isManualDistance: true })}
+                    className="rounded-xl h-12 bg-slate-50 border-slate-200"
+                  />
+                </div>
+                {currentDraft.isRoundTrip && (
+                  <div className="space-y-2">
                     <Label className="text-slate-700">ระยะทางขากลับ (กม.)</Label>
-                    <div className="flex items-center gap-2 mb-2">
-                      <div className="w-2 h-2 rounded-full bg-red-500"></div>
-                      <span className="text-xs text-slate-500 truncate max-w-[120px]">{destination || 'ปลายทาง'}</span>
-                      <ArrowRightLeft className="w-3 h-3 text-slate-400" />
-                      <div className="w-2 h-2 rounded-full bg-blue-500"></div>
-                      <span className="text-xs text-slate-500 truncate max-w-[120px]">{origin || 'ต้นทาง'}</span>
-                    </div>
                     <Input 
                       type="number" 
-                      value={returnDistance || ''} 
-                      onChange={(e) => {
-                        setReturnDistance(parseFloat(e.target.value) || 0);
-                        setIsReturnManualDistance(true);
-                      }} 
-                      className="rounded-xl h-12 bg-white border-slate-200"
-                      placeholder="ระบุระยะทางขากลับ"
+                      value={currentDraft.returnDistance || ''} 
+                      onChange={(e) => updateCurrentDraft({ returnDistance: Math.round(parseFloat(e.target.value) || 0), isReturnManualDistance: true })}
+                      className="rounded-xl h-12 bg-slate-50 border-slate-200"
                     />
                   </div>
                 )}
               </div>
 
-              {isLoaded && origin && destination && (
-                <div className="h-[200px] w-full rounded-2xl overflow-hidden border border-slate-200 mt-4 shadow-sm relative">
+              {isLoaded && directionsResponse && !currentDraft.isManualDistance && (
+                <div className="h-48 rounded-2xl overflow-hidden border border-slate-200 shadow-sm relative">
                   <GoogleMap
                     mapContainerStyle={{ width: '100%', height: '100%' }}
-                    center={{ lat: 13.7563, lng: 100.5018 }}
-                    zoom={10}
                     options={{ disableDefaultUI: true, gestureHandling: 'none' }}
                   >
-                    {directionsResponse && (
-                      <DirectionsRenderer 
-                        directions={directionsResponse} 
-                        options={{
-                          polylineOptions: { strokeColor: '#3b82f6', strokeWeight: 4 },
-                          suppressMarkers: false
-                        }}
-                      />
-                    )}
+                    <DirectionsRenderer directions={directionsResponse} options={{ suppressMarkers: false }} />
                   </GoogleMap>
                   <div className="absolute bottom-3 right-3 bg-white/90 backdrop-blur-sm px-3 py-1.5 rounded-lg shadow-sm border border-slate-100 text-xs font-medium text-slate-600">
                     แผนที่สรุปเส้นทางขาไป
@@ -682,21 +690,13 @@ export default function NewClaim() {
                 </div>
               )}
 
-              {isLoaded && origin && destination && isRoundTrip && returnDirectionsResponse && (
-                <div className="h-[200px] w-full rounded-2xl overflow-hidden border border-slate-200 mt-4 shadow-sm relative">
+              {isLoaded && currentDraft.isRoundTrip && returnDirectionsResponse && !currentDraft.isReturnManualDistance && (
+                <div className="h-48 rounded-2xl overflow-hidden border border-slate-200 shadow-sm relative">
                   <GoogleMap
                     mapContainerStyle={{ width: '100%', height: '100%' }}
-                    center={{ lat: 13.7563, lng: 100.5018 }}
-                    zoom={10}
                     options={{ disableDefaultUI: true, gestureHandling: 'none' }}
                   >
-                    <DirectionsRenderer 
-                      directions={returnDirectionsResponse} 
-                      options={{
-                        polylineOptions: { strokeColor: '#ef4444', strokeWeight: 4 },
-                        suppressMarkers: false
-                      }}
-                    />
+                    <DirectionsRenderer directions={returnDirectionsResponse} options={{ suppressMarkers: false, polylineOptions: { strokeColor: '#10b981' } }} />
                   </GoogleMap>
                   <div className="absolute bottom-3 right-3 bg-white/90 backdrop-blur-sm px-3 py-1.5 rounded-lg shadow-sm border border-slate-100 text-xs font-medium text-slate-600">
                     แผนที่สรุปเส้นทางขากลับ
@@ -711,15 +711,15 @@ export default function NewClaim() {
                       <Navigation className="w-6 h-6" />
                     </div>
                     <div>
-                      <p className="text-sm text-slate-500 font-medium">ระยะทางรวม {dates.length} วัน</p>
+                      <p className="text-sm text-slate-500 font-medium">ระยะทางรวม {currentDraft.dates.length} วัน</p>
                       <p className="text-xl font-bold text-slate-800">
-                        {((distance + (isRoundTrip ? returnDistance : 0)) * dates.length).toFixed(1)} <span className="text-sm font-medium text-slate-500">กม.</span>
+                        {((currentDraft.distance + (currentDraft.isRoundTrip ? currentDraft.returnDistance : 0)) * currentDraft.dates.length).toFixed(0)} <span className="text-sm font-medium text-slate-500">กม.</span>
                       </p>
                     </div>
                   </div>
                   <div className="text-right">
                     <p className="text-sm text-slate-500 font-medium">ยอดเบิก (฿7/กม.)</p>
-                    <p className="text-2xl font-bold text-blue-600">฿{(totalTravelAmount * dates.length).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+                    <p className="text-2xl font-bold text-blue-600">฿{(totalTravelAmount * currentDraft.dates.length).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
                   </div>
                 </div>
               )}
@@ -728,14 +728,14 @@ export default function NewClaim() {
 
           {type === 'misc' && (
             <>
-              {receiptUrl ? (
+              {currentDraft.receiptUrl ? (
                 <div className="relative rounded-2xl overflow-hidden border border-slate-200 shadow-sm">
-                  <img src={receiptUrl} alt="Receipt Preview" className="w-full h-48 object-cover" />
+                  <img src={currentDraft.receiptUrl} alt="Receipt Preview" className="w-full h-48 object-cover" />
                   <Button 
                     variant="destructive" 
                     size="icon" 
                     className="absolute top-3 right-3 h-8 w-8 rounded-full shadow-md"
-                    onClick={() => setReceiptUrl('')}
+                    onClick={() => updateCurrentDraft({ receiptUrl: '' })}
                   >
                     <XCircle className="h-4 w-4" />
                   </Button>
@@ -767,8 +767,8 @@ export default function NewClaim() {
                   <Label className="text-slate-700">รายละเอียด</Label>
                   <Input 
                     placeholder="เช่น ค่าทางด่วน, ค่าที่จอดรถ" 
-                    value={description} 
-                    onChange={(e) => setDescription(e.target.value)} 
+                    value={currentDraft.description} 
+                    onChange={(e) => updateCurrentDraft({ description: e.target.value })} 
                     className="rounded-xl h-12 bg-slate-50 border-slate-200"
                   />
                 </div>
@@ -777,8 +777,8 @@ export default function NewClaim() {
                   <Input 
                     type="number" 
                     placeholder="0.00" 
-                    value={amount || ''} 
-                    onChange={(e) => setAmount(parseFloat(e.target.value))} 
+                    value={currentDraft.amount || ''} 
+                    onChange={(e) => updateCurrentDraft({ amount: parseFloat(e.target.value) })} 
                     className="rounded-xl h-12 bg-slate-50 border-slate-200 text-lg font-medium"
                   />
                 </div>
@@ -786,40 +786,55 @@ export default function NewClaim() {
             </>
           )}
         </CardContent>
+        <CardFooter className="bg-slate-50 p-4 flex flex-col gap-3 border-t border-slate-100">
+          {!editId && (
+            <Button variant="outline" className="w-full h-12 rounded-xl border-dashed border-2" onClick={handleAddNew}>
+              <Plus className="w-4 h-4 mr-2" /> เพิ่มรายการใหม่
+            </Button>
+          )}
+          <div className="flex gap-2 w-full">
+            <Button variant="outline" className="flex-1 h-12 rounded-xl text-red-600 hover:bg-red-50 hover:text-red-700" onClick={handleRemoveCurrent}>
+              <Trash2 className="w-4 h-4 mr-2" /> ลบรายการนี้
+            </Button>
+            <Button className="flex-1 h-12 rounded-xl bg-blue-600 hover:bg-blue-700" onClick={handleSaveCurrent}>
+              <Save className="w-4 h-4 mr-2" /> บันทึกรายการนี้
+            </Button>
+          </div>
+        </CardFooter>
       </Card>
 
       {/* Fixed Bottom Bar */}
-      <div className="fixed bottom-0 left-0 right-0 p-4 bg-white border-t border-slate-200 shadow-[0_-10px_40px_rgba(0,0,0,0.05)] z-40 md:relative md:bg-transparent md:border-none md:shadow-none md:p-0">
-        <div className="max-w-xl mx-auto">
-          <Button 
-            className="w-full h-14 rounded-xl text-lg font-bold bg-blue-600 hover:bg-blue-700 shadow-md" 
-            onClick={handleSave}
-            disabled={type === 'travel' ? (!origin || !destination || distance === 0 || !projectId || !dates.length) : (!description || !amount || !projectId || !dates.length)}
-          >
-            <CheckCircle2 className="w-5 h-5 mr-2" /> บันทึกรายการ
-          </Button>
+      {!editId && drafts.length > 1 && (
+        <div className="fixed bottom-0 left-0 right-0 p-4 bg-white border-t border-slate-200 shadow-[0_-10px_40px_rgba(0,0,0,0.05)] z-40 md:relative md:bg-transparent md:border-none md:shadow-none md:p-0">
+          <div className="max-w-xl mx-auto">
+            <Button 
+              className="w-full h-14 rounded-xl text-lg font-bold bg-green-600 hover:bg-green-700 shadow-md" 
+              onClick={handleSaveAll}
+            >
+              <CheckCircle2 className="w-5 h-5 mr-2" /> บันทึกทั้งหมด ({drafts.length} รายการ)
+            </Button>
+          </div>
         </div>
-      </div>
+      )}
 
       <RoutePickerModal
         isOpen={isRoutePickerOpen}
         onClose={() => setIsRoutePickerOpen(false)}
         onConfirm={handleRouteConfirm}
-        initialOrigin={origin}
-        initialDestination={destination}
+        initialOrigin={currentDraft.origin}
+        initialDestination={currentDraft.destination}
       />
 
       <LocationPickerModal
         isOpen={isLocationPickerOpen}
         onClose={() => setIsLocationPickerOpen(false)}
-        initialAddress={pickerType === 'origin' ? origin : destination}
+        initialAddress={pickerType === 'origin' ? currentDraft.origin : currentDraft.destination}
         onConfirm={(address) => {
           if (pickerType === 'origin') {
-            setOrigin(address);
+            updateCurrentDraft({ origin: address, isManualDistance: false });
           } else {
-            setDestination(address);
+            updateCurrentDraft({ destination: address, isManualDistance: false });
           }
-          setIsManualDistance(false);
         }}
       />
     </div>
